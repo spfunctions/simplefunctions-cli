@@ -40,7 +40,6 @@ async function executeOrder(
   if (priceCents !== undefined && (priceCents < 1 || priceCents > 99)) {
     throw new Error('Price must be 1-99 cents.')
   }
-  const priceDollars = priceCents ? (priceCents / 100).toFixed(2) : undefined
   const maxCost = ((priceCents || 99) * quantity / 100).toFixed(2)
 
   console.log()
@@ -50,7 +49,7 @@ async function executeOrder(
   console.log(`  Side:      ${side === 'yes' ? c.green + 'YES' + c.reset : c.red + 'NO' + c.reset}`)
   console.log(`  Quantity:  ${quantity}`)
   console.log(`  Type:      ${orderType}`)
-  if (priceDollars) console.log(`  Price:     ${priceCents}¢`)
+  if (priceCents) console.log(`  Price:     ${priceCents}¢`)
   console.log(`  Max cost:  $${maxCost}`)
   console.log()
 
@@ -69,7 +68,7 @@ async function executeOrder(
       action,
       type: orderType,
       count: quantity,
-      ...(priceDollars ? { yes_price: priceDollars } : {}),
+      ...(priceCents ? { yes_price: priceCents } : {}),
     })
 
     const order = result.order || result

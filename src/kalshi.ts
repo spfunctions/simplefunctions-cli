@@ -477,7 +477,7 @@ export async function createOrder(params: {
   action: 'buy' | 'sell'
   type: 'limit' | 'market'
   count: number
-  yes_price?: string        // FixedPointDollars e.g. "0.4300"
+  yes_price?: number        // cents integer e.g. 5
   client_order_id?: string
 }): Promise<{ order: any }> {
   return kalshiAuthPost('/portfolio/orders', params)

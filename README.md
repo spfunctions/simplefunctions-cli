@@ -7,6 +7,12 @@ Thesis engine for prediction market agents. Scan Kalshi + Polymarket, detect edg
 ## Install
 
 ```bash
+curl -fsSL https://simplefunctions.dev/install.sh | sh
+```
+
+Or with npm directly:
+
+```bash
 npm install -g @spfunctions/cli
 sf setup
 ```

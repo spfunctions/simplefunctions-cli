@@ -92,8 +92,9 @@ program
   .option('--key <key>', 'Set SF API key (non-interactive, for CI)')
   .option('--enable-trading', 'Enable trading (sf buy/sell/cancel)')
   .option('--disable-trading', 'Disable trading')
+  .option('--kalshi', 'Reconfigure Kalshi API credentials')
   .action(async (opts) => {
-    await run(() => setupCommand({ check: opts.check, reset: opts.reset, key: opts.key, enableTrading: opts.enableTrading, disableTrading: opts.disableTrading }))
+    await run(() => setupCommand({ check: opts.check, reset: opts.reset, key: opts.key, enableTrading: opts.enableTrading, disableTrading: opts.disableTrading, kalshi: opts.kalshi }))
   })
 
 // ── sf list ──────────────────────────────────────────────────────────────────

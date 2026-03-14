@@ -824,8 +824,18 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
           }
         }
         cachedPositions = positions
+        const formatted = positions.map((p: any) => ({
+          ticker: p.ticker,
+          side: p.side,
+          quantity: p.quantity,
+          avg_price: `${p.average_price_paid}¢`,
+          current_price: `${p.current_value}¢`,
+          unrealized_pnl: `$${(p.unrealized_pnl / 100).toFixed(2)}`,
+          total_cost: `$${(p.total_cost / 100).toFixed(2)}`,
+          realized_pnl: `$${(p.realized_pnl / 100).toFixed(2)}`,
+        }))
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(positions, null, 2) }],
+          content: [{ type: 'text' as const, text: JSON.stringify(formatted, null, 2) }],
           details: {},
         }
       },
@@ -1194,8 +1204,8 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
         }),
         execute: async (_toolCallId: string, params: any) => {
           const { createOrder } = await import('../kalshi.js')
-          const priceDollars = params.price_cents ? (params.price_cents / 100).toFixed(2) : undefined
-          const maxCost = ((params.price_cents || 99) * params.count / 100).toFixed(2)
+          const priceCents = params.price_cents ? Math.round(Number(params.price_cents)) : undefined
+          const maxCost = ((priceCents || 99) * params.count / 100).toFixed(2)
 
           // Show preview
           const preview = [
@@ -1205,7 +1215,7 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
             `  Action:   ${params.action.toUpperCase()}`,
             `  Quantity: ${params.count}`,
             `  Type:     ${params.type}`,
-            params.price_cents ? `  Price:    ${params.price_cents}\u00A2` : '',
+            priceCents ? `  Price:    ${priceCents}\u00A2` : '',
             `  Max cost: $${maxCost}`,
           ].filter(Boolean).join('\n')
 
@@ -1226,7 +1236,7 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
               action: params.action,
               type: params.type,
               count: params.count,
-              ...(priceDollars ? { yes_price: priceDollars } : {}),
+              ...(priceCents ? { yes_price: priceCents } : {}),
             })
             const order = result.order || result
             return {
@@ -1307,6 +1317,7 @@ Short-term markets (weekly/monthly contracts) settle into hard data that calibra
 - If a causal tree node probability seriously contradicts the market price, point it out.
 - Use Chinese if the user writes in Chinese, English if they write in English.
 - For any question about prices, positions, or P&L, ALWAYS call a tool to get fresh data first. Never answer price-related questions using the cached data in this system prompt.
+- Prices are in cents (e.g. 35¢). P&L, cost, and balance are in dollars (e.g. $90.66). Tool outputs are pre-formatted with units — do not re-convert.
 - Align tables. Be precise with numbers to the cent.
 
 ## Strategy rules
@@ -1317,6 +1328,10 @@ When the conversation produces a concrete trade idea (specific contract, directi
 - Put the full reasoning into rationale.
 - After creating, confirm the strategy details and mention that sf runtime --dangerous can execute it.
 - If the user says "change the stop loss on T150 to 30", use update_strategy.
+
+## Trading status
+
+${config.tradingEnabled ? 'Trading is ENABLED. You have place_order and cancel_order tools.' : 'Trading is DISABLED. You cannot place or cancel orders. Tell the user to run `sf setup --enable-trading` to unlock trading.'}
 
 ## Current thesis state
 
@@ -1908,7 +1923,7 @@ Output a structured summary. Be concise but preserve every important detail — 
             const result = await createOrder({
               ticker, side: 'yes', action: 'buy', type: 'limit',
               count: parseInt(qtyStr),
-              yes_price: (parseInt(priceStr) / 100).toFixed(2),
+              yes_price: parseInt(priceStr),
             })
             addSystemText(C.emerald('\u2713 Order placed: ' + ((result.order || result).order_id || 'OK')))
           } catch (err: any) {
@@ -1939,7 +1954,7 @@ Output a structured summary. Be concise but preserve every important detail — 
             const result = await createOrder({
               ticker, side: 'yes', action: 'sell', type: 'limit',
               count: parseInt(qtyStr),
-              yes_price: (parseInt(priceStr) / 100).toFixed(2),
+              yes_price: parseInt(priceStr),
             })
             addSystemText(C.emerald('\u2713 Order placed: ' + ((result.order || result).order_id || 'OK')))
           } catch (err: any) {
@@ -2318,7 +2333,14 @@ async function runPlainTextAgent(params: {
             pos.unrealized_pnl = Math.round((livePrice - pos.average_price_paid) * pos.quantity)
           }
         }
-        return { content: [{ type: 'text' as const, text: JSON.stringify(positions, null, 2) }], details: {} }
+        const formatted = positions.map((p: any) => ({
+          ticker: p.ticker, side: p.side, quantity: p.quantity,
+          avg_price: `${p.average_price_paid}¢`, current_price: `${p.current_value}¢`,
+          unrealized_pnl: `$${(p.unrealized_pnl / 100).toFixed(2)}`,
+          total_cost: `$${(p.total_cost / 100).toFixed(2)}`,
+          realized_pnl: `$${(p.realized_pnl / 100).toFixed(2)}`,
+        }))
+        return { content: [{ type: 'text' as const, text: JSON.stringify(formatted, null, 2) }], details: {} }
       },
     },
     {
@@ -2482,7 +2504,7 @@ ${edgesSummary}
 
 ${ctx.lastEvaluation?.summary ? `Latest evaluation: ${ctx.lastEvaluation.summary.slice(0, 300)}` : ''}
 
-Rules: Be concise. Use tools when needed. Don't ask "anything else?".`
+Rules: Be concise. Use tools when needed. Don't ask "anything else?". Prices are in cents (e.g. 35¢). P&L, cost, and balance are in dollars (e.g. $90.66). Tool outputs are pre-formatted with units — do not re-convert.`
 
   // ── Create agent ──────────────────────────────────────────────────────────
   const agent = new Agent({

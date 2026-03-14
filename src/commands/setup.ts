@@ -125,6 +125,7 @@ interface SetupOpts {
   key?: string
   enableTrading?: boolean
   disableTrading?: boolean
+  kalshi?: boolean
 }
 
 export async function setupCommand(opts: SetupOpts): Promise<void> {
@@ -155,6 +156,25 @@ export async function setupCommand(opts: SetupOpts): Promise<void> {
     saveConfig({ ...existing, apiKey: opts.key, apiUrl })
     ok(result.msg)
     ok(`保存到 ${getConfigPath()}`)
+    return
+  }
+
+  // ── sf setup --kalshi (reconfigure Kalshi credentials) ──────────────────
+  if (opts.kalshi) {
+    const existing = loadFileConfig()
+    blank()
+    console.log(`  ${bold('重新配置 Kalshi 凭证')}`)
+    blank()
+    info('去 https://kalshi.com/account/api-keys 生成新的 API key。')
+    info('如果需要交易功能，确保勾选 read+write 权限。')
+    blank()
+    await promptForKalshi(existing)
+    saveConfig(existing)
+    if (existing.kalshiKeyId) {
+      process.env.KALSHI_API_KEY_ID = existing.kalshiKeyId
+      process.env.KALSHI_PRIVATE_KEY_PATH = existing.kalshiPrivateKeyPath!
+    }
+    blank()
     return
   }
 
