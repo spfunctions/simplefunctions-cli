@@ -559,14 +559,14 @@ export async function getBatchCandlesticks(params: {
   if (!isKalshiConfigured()) return []
   try {
     const searchParams = new URLSearchParams()
-    searchParams.set('tickers', params.tickers.join(','))
+    searchParams.set('market_tickers', params.tickers.join(','))
     searchParams.set('start_ts', params.startTs.toString())
     searchParams.set('end_ts', params.endTs.toString())
     searchParams.set('period_interval', (params.periodInterval ?? 1440).toString())
-    const data = await kalshiAuthGet<{ candlesticks: { market_ticker: string; candlesticks: any[] }[] }>(
+    const data = await kalshiAuthGet<{ markets: { market_ticker: string; candlesticks: any[] }[] }>(
       `/markets/candlesticks?${searchParams.toString()}`
     )
-    return data.candlesticks || []
+    return data.markets || []
   } catch (err) {
     console.warn('[Kalshi] Failed to fetch candlesticks:', err)
     return []

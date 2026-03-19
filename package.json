@@ -1,6 +1,6 @@
 {
   "name": "@spfunctions/cli",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Prediction market intelligence CLI. Causal thesis model, 24/7 Kalshi/Polymarket scan, live orderbook, edge detection. Interactive agent mode with tool calling.",
   "bin": {
     "sf": "./dist/index.js"

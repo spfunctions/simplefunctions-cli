@@ -67,8 +67,8 @@ export async function performanceCommand(opts: {
 
     const side: string = fill.side || 'yes'
     const action: string = fill.action || 'buy'
-    const count: number = fill.count || 0
-    const yesPrice: number = fill.yes_price || 0  // cents int
+    const count: number = Math.round(parseFloat(fill.count_fp || fill.count || '0'))
+    const yesPrice: number = Math.round(parseFloat(fill.yes_price_dollars || '0') * 100)  // dollars string → cents int
 
     // Determine direction: buy yes = +count, sell yes = -count
     let delta = count
@@ -133,7 +133,11 @@ export async function performanceCommand(opts: {
     const priceByDate = new Map<string, number>()
     for (const candle of (mc.candlesticks || [])) {
       // close_dollars is a string like "0.4800"
-      const closeDollars = parseFloat(candle.close_dollars || candle.close || '0')
+      // price object may be empty; use midpoint of yes_bid.close and yes_ask.close
+      const bidClose = parseFloat(candle.yes_bid?.close_dollars || '0')
+      const askClose = parseFloat(candle.yes_ask?.close_dollars || '0')
+      const mid = bidClose > 0 && askClose > 0 ? (bidClose + askClose) / 2 : bidClose || askClose
+      const closeDollars = parseFloat(candle.price?.close_dollars || '0') || mid
       const closeCents = Math.round(closeDollars * 100)
       const ts = candle.end_period_ts || candle.period_end_ts || candle.ts
       if (ts) {
