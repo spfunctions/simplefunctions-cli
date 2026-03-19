@@ -1,173 +1,100 @@
-# SimpleFunctions CLI
+# SimpleFunctions CLI (`sf`)
 
-Thesis engine for prediction market agents. Scan Kalshi + Polymarket, detect edges, monitor autonomously.
-
-![demo](./demo.gif)
+Prediction market thesis agent CLI. Pure HTTP client — no project dependencies.
 
 ## Install
 
 ```bash
-curl -fsSL https://simplefunctions.dev/install.sh | sh
-```
-
-Or with npm directly:
-
-```bash
 npm install -g @spfunctions/cli
-sf setup
 ```
 
-`sf setup` walks you through API key configuration with real-time validation. Get your key at [simplefunctions.dev/dashboard/keys](https://simplefunctions.dev/dashboard/keys).
-
-## Quick Start
+## Configuration
 
 ```bash
-# No API key needed — try right now
-sf scan "recession 2026"
-sf schedule
-sf explore
-
-# With API key
-sf create "Oil stays above $100 through 2026"
-sf context <id> --json
-sf agent
+export SF_API_KEY=sf_live_xxx           # required
+export SF_API_URL=https://simplefunctions.dev  # optional, defaults to production
 ```
 
-## What It Does
-
-You express a macro thesis. The engine decomposes it into a causal tree of testable sub-claims, scans Kalshi and Polymarket for contracts where market prices diverge from thesis-implied prices (edges), and monitors everything autonomously every 15 minutes.
-
-```
-Thesis → Causal Tree → Market Scan → Edges
-                                       ↓
-Heartbeat (15 min): News + Prices + Milestones → Updated Confidence
-                                                   ↓
-                                       Webhook / Delta API / Feed
+Or pass inline:
+```bash
+sf --api-key sf_live_xxx list
 ```
 
 ## Commands
 
-### Free (no API key)
-
-| Command | Description |
-|---------|-------------|
-| `sf scan "keywords"` | Search Kalshi markets |
-| `sf scan --series KXWTIMAX` | Browse series events + live prices |
-| `sf schedule` | Exchange status (open/closed) |
-| `sf announcements` | Exchange announcements |
-| `sf explore [slug]` | Browse public theses |
-
-### Thesis
-
-| Command | Description |
-|---------|-------------|
-| `sf create "thesis"` | Create new thesis |
-| `sf list` | List all theses |
-| `sf context <id> [--json]` | Thesis snapshot — causal tree, edges, evaluation |
-| `sf get <id>` | Full thesis details |
-| `sf signal <id> "content"` | Inject signal |
-| `sf evaluate <id>` | Trigger deep evaluation |
-| `sf edges [--json]` | Top edges across all theses |
-| `sf dashboard` | Portfolio overview |
-| `sf feed [--hours 24]` | Evaluation history stream |
-| `sf whatif <id> --set "n1=0.1"` | Scenario analysis (zero LLM cost) |
-
-### Markets
-
-| Command | Description |
-|---------|-------------|
-| `sf milestones [--thesis <id>]` | Upcoming Kalshi calendar events |
-| `sf forecast <eventTicker>` | P50/P75/P90 percentile distribution |
-| `sf history <ticker>` | Settled market data |
-
-### Portfolio
-
-| Command | Description |
-|---------|-------------|
-| `sf positions` | Kalshi positions with edge overlay |
-| `sf balance` | Account balance |
-| `sf orders` | Current orders |
-| `sf fills` | Recent fills |
-| `sf settlements` | Settled contracts with P&L |
-
-### Trading
-
-Requires `sf setup --enable-trading`. All orders have a 3-second countdown.
-
-| Command | Description |
-|---------|-------------|
-| `sf buy <ticker> <qty> --price <cents>` | Buy contracts |
-| `sf sell <ticker> <qty> --price <cents>` | Sell contracts |
-| `sf cancel <orderId>` | Cancel order |
-| `sf cancel --all` | Cancel all resting orders |
-
-## Interactive Agent
-
-```bash
-sf agent                  # continue last session
-sf agent <id> --new       # fresh session for specific thesis
-sf agent --plain          # plain text mode (pipe-friendly)
+### `sf list`
+List all theses.
+```
+ID          Status  Conf    Updated         Title
+f582bf76    active   82%    Mar 12 11:13    Trump cannot exit the Iran war...
 ```
 
-Natural language interface with 15+ tools. Analyzes edges, suggests trades, monitors positions. Slash commands: `/tree`, `/edges`, `/pos`, `/eval`, `/buy`, `/sell`, `/cancel`, `/switch`.
-
-## MCP Server
-
-Connect any MCP-compatible client — Claude Code, Cursor, Cline, Roo Code.
-
+### `sf get <id>`
+Full thesis details: causal tree, edge analysis, positions, last evaluation.
 ```bash
-claude mcp add simplefunctions --url https://simplefunctions.dev/api/mcp/mcp
+sf get f582bf76
+sf get f582bf76 --json
 ```
 
-15 tools: `get_context`, `list_theses`, `inject_signal`, `trigger_evaluation`, `create_thesis`, `what_if`, `scan_markets`, `get_milestones`, `get_forecast`, `get_settlements`, `get_balance`, `get_orders`, `get_fills`, `get_schedule`, `explore_public`.
-
-## Agent Integration
-
-Your agent only needs three operations:
-
+### `sf context <id>`
+**Primary command for agents.** Returns a compact context snapshot: thesis, confidence, causal tree nodes, top edges, positions, last evaluation summary.
 ```bash
-# 1. Read — get current thesis state
-sf context <id> --json
-
-# 2. Write — inject observations
-sf signal <id> "breaking: Hormuz blockade confirmed" --type news
-
-# 3. React — trigger analysis when something big happens
-sf evaluate <id>
+sf context f582bf76
+sf context f582bf76 --json   # machine-readable for agent parsing
 ```
 
-The heartbeat engine handles news scanning, price monitoring, and routine evaluation automatically. For efficient polling, use the delta API:
-
+### `sf create "thesis text"`
+Create a new thesis. Sync by default (waits for formation agent to complete).
 ```bash
-curl "https://simplefunctions.dev/api/thesis/<id>/changes?since=<ISO timestamp>" \
-  -H "Authorization: Bearer sf_live_xxx"
-# Nothing changed: {"changed": false} — 50 bytes
+sf create "Trump cannot exit the Iran war gracefully before 2027"
+sf create "..." --async   # return immediately
 ```
 
-## REST API
+### `sf signal <id> "content"`
+Inject a signal into the thesis queue. Queued for next monitor cycle.
+```bash
+sf signal f582bf76 "Oil closes at $95 today"
+sf signal f582bf76 "Iran closes Strait of Hormuz" --type news
+sf signal f582bf76 "My read: escalation likely" --type user_note
+```
+Signal types: `news` | `user_note` | `external` (default: `user_note`)
 
-Base URL: `https://simplefunctions.dev`
+### `sf evaluate <id>`
+Trigger a deep evaluation using the heavy model (Claude Opus).
+```bash
+sf evaluate f582bf76
+```
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/thesis/create` | Create thesis (`?sync=true` to wait) |
-| `GET` | `/api/thesis/:id/context` | Thesis snapshot |
-| `GET` | `/api/thesis/:id/changes?since=` | Lightweight delta check |
-| `POST` | `/api/thesis/:id/signal` | Inject signal |
-| `POST` | `/api/thesis/:id/evaluate` | Trigger evaluation |
-| `GET` | `/api/thesis` | List theses |
-| `GET` | `/api/feed?hours=24` | Evaluation history |
+### `sf scan "keywords"`
+Explore Kalshi markets directly (no auth required).
+```bash
+sf scan "oil recession iran"
+sf scan --series KXWTIMAX
+sf scan --market KXWTIMAX-26DEC31-T140
+sf scan "oil" --json
+```
 
-Auth: `Authorization: Bearer sf_live_xxx`
+## For AI Agents (OpenClaw etc.)
 
-## Links
+After `npm install -g simplefunctions` and setting `SF_API_KEY`:
 
-- [Website](https://simplefunctions.dev)
-- [Documentation](https://simplefunctions.dev/docs)
-- [Agent Guide](https://simplefunctions.dev/docs/guide)
-- [API Keys](https://simplefunctions.dev/dashboard/keys)
-- [Public Theses](https://simplefunctions.dev/theses)
+```
+You can use the sf CLI to interact with SimpleFunctions:
+- sf context <id> --json    Get current thesis state (JSON)
+- sf signal <id> "content"  Inject an observation note
+- sf list                   List all theses
+- sf scan "keywords"        Explore Kalshi markets
+```
 
-## License
+Agents should call `sf context <id> --json` periodically to get the latest state, then decide whether to inject signals or alert the user.
 
-MIT
+## Local Development
+
+```bash
+cd cli
+npm install
+npm run dev -- list          # run without building
+npm run build                # compile to dist/
+npm link                     # install as global 'sf' command
+sf list
+```

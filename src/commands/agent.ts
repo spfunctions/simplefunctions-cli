@@ -1111,6 +1111,72 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
         }
       },
     },
+    {
+      name: 'create_thesis',
+      label: 'Create Thesis',
+      description: 'Create a new thesis from a raw thesis statement. Returns the thesis ID, confidence, node count, and edge count.',
+      parameters: Type.Object({
+        rawThesis: Type.String({ description: 'The raw thesis statement to create' }),
+        webhookUrl: Type.Optional(Type.String({ description: 'Optional webhook URL for notifications' })),
+      }),
+      execute: async (_toolCallId: string, params: any) => {
+        const result = await sfClient.createThesis(params.rawThesis, true)
+        const thesis = result.thesis || result
+        const nodeCount = thesis.causalTree?.nodes?.length || 0
+        const edgeCount = (thesis.edges || []).length
+        const confidence = typeof thesis.confidence === 'number' ? Math.round(thesis.confidence * 100) : 0
+        return {
+          content: [{ type: 'text' as const, text: `Thesis created.\nID: ${thesis.id}\nConfidence: ${confidence}%\nNodes: ${nodeCount}\nEdges: ${edgeCount}` }],
+          details: {},
+        }
+      },
+    },
+    {
+      name: 'get_edges',
+      label: 'Get Edges',
+      description: 'Get top edges across all active theses. Returns the top 10 edges sorted by absolute edge size with ticker, market name, edge size, direction, and venue.',
+      parameters: emptyParams,
+      execute: async () => {
+        const { theses } = await sfClient.listTheses()
+        const activeTheses = (theses || []).filter((t: any) => t.status === 'active' || t.status === 'monitoring')
+        const allEdges: any[] = []
+        for (const t of activeTheses) {
+          try {
+            const ctx = await sfClient.getContext(t.id)
+            for (const edge of (ctx.edges || [])) {
+              allEdges.push({ ...edge, thesisId: t.id })
+            }
+          } catch { /* skip inaccessible theses */ }
+        }
+        allEdges.sort((a, b) => Math.abs(b.edge || b.edgeSize || 0) - Math.abs(a.edge || a.edgeSize || 0))
+        const top10 = allEdges.slice(0, 10).map((e: any) => ({
+          ticker: e.marketId || e.ticker || '-',
+          market: e.market || e.marketTitle || '-',
+          edge: e.edge || e.edgeSize || 0,
+          direction: e.direction || 'yes',
+          venue: e.venue || 'kalshi',
+        }))
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(top10, null, 2) }],
+          details: {},
+        }
+      },
+    },
+    {
+      name: 'get_feed',
+      label: 'Get Feed',
+      description: 'Get evaluation history / activity feed. Shows recent evaluations, signals, and changes across theses.',
+      parameters: Type.Object({
+        hours: Type.Optional(Type.Number({ description: 'Hours of history to fetch (default 24)' })),
+      }),
+      execute: async (_toolCallId: string, params: any) => {
+        const result = await sfClient.getFeed(params.hours || 24)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+          details: {},
+        }
+      },
+    },
   ]
 
   // ── What-if tool (always available) ────────────────────────────────────────
@@ -2472,7 +2538,303 @@ async function runPlainTextAgent(params: {
         }
       },
     },
+    {
+      name: 'create_thesis',
+      label: 'Create Thesis',
+      description: 'Create a new thesis from a raw thesis statement. Returns the thesis ID, confidence, node count, and edge count.',
+      parameters: Type.Object({
+        rawThesis: Type.String({ description: 'The raw thesis statement to create' }),
+        webhookUrl: Type.Optional(Type.String({ description: 'Optional webhook URL for notifications' })),
+      }),
+      execute: async (_id: string, p: any) => {
+        const result = await sfClient.createThesis(p.rawThesis, true)
+        const thesis = result.thesis || result
+        const nodeCount = thesis.causalTree?.nodes?.length || 0
+        const edgeCount = (thesis.edges || []).length
+        const confidence = typeof thesis.confidence === 'number' ? Math.round(thesis.confidence * 100) : 0
+        return {
+          content: [{ type: 'text' as const, text: `Thesis created.\nID: ${thesis.id}\nConfidence: ${confidence}%\nNodes: ${nodeCount}\nEdges: ${edgeCount}` }],
+          details: {},
+        }
+      },
+    },
+    {
+      name: 'get_edges',
+      label: 'Get Edges',
+      description: 'Get top edges across all active theses. Returns the top 10 edges sorted by absolute edge size with ticker, market name, edge size, direction, and venue.',
+      parameters: emptyParams,
+      execute: async () => {
+        const { theses } = await sfClient.listTheses()
+        const activeTheses = (theses || []).filter((t: any) => t.status === 'active' || t.status === 'monitoring')
+        const allEdges: any[] = []
+        for (const t of activeTheses) {
+          try {
+            const ctx = await sfClient.getContext(t.id)
+            for (const edge of (ctx.edges || [])) {
+              allEdges.push({ ...edge, thesisId: t.id })
+            }
+          } catch { /* skip inaccessible theses */ }
+        }
+        allEdges.sort((a, b) => Math.abs(b.edge || b.edgeSize || 0) - Math.abs(a.edge || a.edgeSize || 0))
+        const top10 = allEdges.slice(0, 10).map((e: any) => ({
+          ticker: e.marketId || e.ticker || '-',
+          market: e.market || e.marketTitle || '-',
+          edge: e.edge || e.edgeSize || 0,
+          direction: e.direction || 'yes',
+          venue: e.venue || 'kalshi',
+        }))
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(top10, null, 2) }],
+          details: {},
+        }
+      },
+    },
+    {
+      name: 'get_feed',
+      label: 'Get Feed',
+      description: 'Get evaluation history / activity feed. Shows recent evaluations, signals, and changes across theses.',
+      parameters: Type.Object({
+        hours: Type.Optional(Type.Number({ description: 'Hours of history to fetch (default 24)' })),
+      }),
+      execute: async (_id: string, p: any) => {
+        const result = await sfClient.getFeed(p.hours || 24)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+          details: {},
+        }
+      },
+    },
+    {
+      name: 'explore_public',
+      label: 'Explore Public Theses',
+      description: 'Browse public theses from other users. No auth required. Pass a slug to get details, or omit to list all.',
+      parameters: Type.Object({
+        slug: Type.Optional(Type.String({ description: 'Specific thesis slug, or empty to list all' })),
+      }),
+      execute: async (_id: string, p: any) => {
+        const base = 'https://simplefunctions.dev'
+        if (p.slug) {
+          const res = await fetch(`${base}/api/public/thesis/${p.slug}`)
+          if (!res.ok) return { content: [{ type: 'text' as const, text: `Not found: ${p.slug}` }], details: {} }
+          const data = await res.json()
+          return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], details: {} }
+        }
+        const res = await fetch(`${base}/api/public/theses`)
+        if (!res.ok) return { content: [{ type: 'text' as const, text: 'Failed to fetch public theses' }], details: {} }
+        const data = await res.json()
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], details: {} }
+      },
+    },
+    {
+      name: 'create_strategy',
+      label: 'Create Strategy',
+      description: 'Create a trading strategy for a thesis. Extract hard conditions (entryBelow/stopLoss/takeProfit as cents) and soft conditions from conversation. Called when user mentions specific trade ideas.',
+      parameters: Type.Object({
+        thesisId: Type.String({ description: 'Thesis ID' }),
+        marketId: Type.String({ description: 'Market ticker e.g. KXWTIMAX-26DEC31-T150' }),
+        market: Type.String({ description: 'Human-readable market name' }),
+        direction: Type.String({ description: 'yes or no' }),
+        horizon: Type.Optional(Type.String({ description: 'short, medium, or long. Default: medium' })),
+        entryBelow: Type.Optional(Type.Number({ description: 'Entry trigger: ask <= this value (cents)' })),
+        entryAbove: Type.Optional(Type.Number({ description: 'Entry trigger: ask >= this value (cents, for NO direction)' })),
+        stopLoss: Type.Optional(Type.Number({ description: 'Stop loss: bid <= this value (cents)' })),
+        takeProfit: Type.Optional(Type.Number({ description: 'Take profit: bid >= this value (cents)' })),
+        maxQuantity: Type.Optional(Type.Number({ description: 'Max total contracts. Default: 500' })),
+        perOrderQuantity: Type.Optional(Type.Number({ description: 'Contracts per order. Default: 50' })),
+        softConditions: Type.Optional(Type.String({ description: 'LLM-evaluated conditions e.g. "only enter when n3 > 60%"' })),
+        rationale: Type.Optional(Type.String({ description: 'Full logic description' })),
+      }),
+      execute: async (_id: string, p: any) => {
+        const result = await sfClient.createStrategyAPI(p.thesisId, {
+          marketId: p.marketId,
+          market: p.market,
+          direction: p.direction,
+          horizon: p.horizon,
+          entryBelow: p.entryBelow,
+          entryAbove: p.entryAbove,
+          stopLoss: p.stopLoss,
+          takeProfit: p.takeProfit,
+          maxQuantity: p.maxQuantity,
+          perOrderQuantity: p.perOrderQuantity,
+          softConditions: p.softConditions,
+          rationale: p.rationale,
+          createdBy: 'agent',
+        })
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], details: {} }
+      },
+    },
+    {
+      name: 'list_strategies',
+      label: 'List Strategies',
+      description: 'List strategies for a thesis. Filter by status (active/watching/executed/cancelled/review) or omit for all.',
+      parameters: Type.Object({
+        thesisId: Type.String({ description: 'Thesis ID' }),
+        status: Type.Optional(Type.String({ description: 'Filter by status. Omit for all.' })),
+      }),
+      execute: async (_id: string, p: any) => {
+        const result = await sfClient.getStrategies(p.thesisId, p.status)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], details: {} }
+      },
+    },
+    {
+      name: 'update_strategy',
+      label: 'Update Strategy',
+      description: 'Update a strategy (change stop loss, take profit, status, priority, etc.)',
+      parameters: Type.Object({
+        thesisId: Type.String({ description: 'Thesis ID' }),
+        strategyId: Type.String({ description: 'Strategy ID (UUID)' }),
+        stopLoss: Type.Optional(Type.Number({ description: 'New stop loss (cents)' })),
+        takeProfit: Type.Optional(Type.Number({ description: 'New take profit (cents)' })),
+        entryBelow: Type.Optional(Type.Number({ description: 'New entry below trigger (cents)' })),
+        entryAbove: Type.Optional(Type.Number({ description: 'New entry above trigger (cents)' })),
+        status: Type.Optional(Type.String({ description: 'New status: active|watching|executed|cancelled|review' })),
+        priority: Type.Optional(Type.Number({ description: 'New priority' })),
+        softConditions: Type.Optional(Type.String({ description: 'Updated soft conditions' })),
+        rationale: Type.Optional(Type.String({ description: 'Updated rationale' })),
+      }),
+      execute: async (_id: string, p: any) => {
+        const { thesisId, strategyId, ...updates } = p
+        const result = await sfClient.updateStrategyAPI(thesisId, strategyId, updates)
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], details: {} }
+      },
+    },
+    {
+      name: 'what_if',
+      label: 'What-If',
+      description: 'Run a what-if scenario: override causal tree node probabilities and see how edges and confidence change. Zero LLM cost — pure computation.',
+      parameters: Type.Object({
+        overrides: Type.Array(Type.Object({
+          nodeId: Type.String({ description: 'Causal tree node ID (e.g. n1, n3.1)' }),
+          newProbability: Type.Number({ description: 'New probability 0-1' }),
+        }), { description: 'Node probability overrides' }),
+      }),
+      execute: async (_id: string, p: any) => {
+        const ctx = latestContext
+        const allNodes: any[] = []
+        function flatten(nodes: any[]) {
+          for (const n of nodes) { allNodes.push(n); if (n.children?.length) flatten(n.children) }
+        }
+        const rawNodes = ctx.causalTree?.nodes || []
+        flatten(rawNodes)
+        const treeNodes = rawNodes.filter((n: any) => n.depth === 0 || (n.depth === undefined && !n.id.includes('.')))
+
+        const overrideMap = new Map<string, number>(p.overrides.map((o: any) => [o.nodeId, o.newProbability]))
+
+        const oldConf = treeNodes.reduce((s: number, n: any) => s + (n.probability || 0) * (n.importance || 0), 0)
+        const newConf = treeNodes.reduce((s: number, n: any) => {
+          const prob = overrideMap.get(n.id) ?? n.probability ?? 0
+          return s + prob * (n.importance || 0)
+        }, 0)
+
+        const nodeScales = new Map<string, number>()
+        for (const [nid, np] of overrideMap.entries()) {
+          const nd = allNodes.find((n: any) => n.id === nid)
+          if (nd && nd.probability > 0) nodeScales.set(nid, Math.max(0, Math.min(2, np / nd.probability)))
+        }
+
+        const edges = (ctx.edges || []).map((edge: any) => {
+          const relNode = edge.relatedNodeId
+          let scaleFactor = 1
+          if (relNode) {
+            const candidates = [relNode, relNode.split('.').slice(0, -1).join('.'), relNode.split('.')[0]].filter(Boolean)
+            for (const cid of candidates) {
+              if (nodeScales.has(cid)) { scaleFactor = nodeScales.get(cid)!; break }
+            }
+          }
+          const mkt = edge.marketPrice || 0
+          const oldTP = edge.thesisPrice || edge.thesisImpliedPrice || mkt
+          const oldEdge = edge.edge || edge.edgeSize || 0
+          const newTP = Math.round((mkt + (oldTP - mkt) * scaleFactor) * 100) / 100
+          const dir = edge.direction || 'yes'
+          const newEdge = Math.round((dir === 'yes' ? newTP - mkt : mkt - newTP) * 100) / 100
+          return {
+            market: edge.market || edge.marketTitle || edge.marketId,
+            marketPrice: mkt,
+            oldEdge,
+            newEdge,
+            delta: newEdge - oldEdge,
+            signal: Math.abs(newEdge - oldEdge) < 1 ? 'unchanged' : (oldEdge > 0 && newEdge < 0) || (oldEdge < 0 && newEdge > 0) ? 'REVERSED' : Math.abs(newEdge) < 2 ? 'GONE' : 'reduced',
+          }
+        }).filter((e: any) => e.signal !== 'unchanged')
+
+        const result = {
+          overrides: p.overrides.map((o: any) => {
+            const node = allNodes.find((n: any) => n.id === o.nodeId)
+            return { nodeId: o.nodeId, label: node?.label || o.nodeId, oldProb: node?.probability, newProb: o.newProbability }
+          }),
+          confidence: { old: Math.round(oldConf * 100), new: Math.round(newConf * 100), delta: Math.round((newConf - oldConf) * 100) },
+          affectedEdges: edges,
+        }
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], details: {} }
+      },
+    },
   ]
+
+  // ── Trading tools (conditional on tradingEnabled) for plain mode ──────────
+  const config = loadConfig()
+  if (config.tradingEnabled) {
+    tools.push(
+      {
+        name: 'place_order',
+        label: 'Place Order',
+        description: 'Place a buy or sell order on Kalshi. Executes directly (no confirmation prompt in plain mode).',
+        parameters: Type.Object({
+          ticker: Type.String({ description: 'Market ticker e.g. KXWTIMAX-26DEC31-T135' }),
+          side: Type.String({ description: 'yes or no' }),
+          action: Type.String({ description: 'buy or sell' }),
+          type: Type.String({ description: 'limit or market' }),
+          count: Type.Number({ description: 'Number of contracts' }),
+          price_cents: Type.Optional(Type.Number({ description: 'Limit price in cents (1-99). Required for limit orders.' })),
+        }),
+        execute: async (_id: string, p: any) => {
+          const { createOrder } = await import('../kalshi.js')
+          const priceCents = p.price_cents ? Math.round(Number(p.price_cents)) : undefined
+          const maxCost = ((priceCents || 99) * p.count / 100).toFixed(2)
+
+          process.stderr.write(`  Order: ${p.action.toUpperCase()} ${p.count}x ${p.ticker} ${p.side.toUpperCase()} @ ${priceCents ? priceCents + '\u00A2' : 'market'} (max $${maxCost})\n`)
+
+          try {
+            const result = await createOrder({
+              ticker: p.ticker,
+              side: p.side,
+              action: p.action,
+              type: p.type,
+              count: p.count,
+              ...(priceCents ? { yes_price: priceCents } : {}),
+            })
+            const order = result.order || result
+            return {
+              content: [{ type: 'text' as const, text: `Order placed: ${order.order_id || 'OK'}\nStatus: ${order.status || '-'}\nFilled: ${order.fill_count_fp || 0}/${order.initial_count_fp || p.count}` }],
+              details: {},
+            }
+          } catch (err: any) {
+            const msg = err.message || String(err)
+            if (msg.includes('403')) {
+              return { content: [{ type: 'text' as const, text: '403 Forbidden \u2014 your Kalshi key lacks write permission. Get a read+write key at kalshi.com/account/api-keys' }], details: {} }
+            }
+            return { content: [{ type: 'text' as const, text: `Order failed: ${msg}` }], details: {} }
+          }
+        },
+      },
+      {
+        name: 'cancel_order',
+        label: 'Cancel Order',
+        description: 'Cancel a resting order by order ID. Executes directly (no confirmation prompt in plain mode).',
+        parameters: Type.Object({
+          order_id: Type.String({ description: 'Order ID to cancel' }),
+        }),
+        execute: async (_id: string, p: any) => {
+          const { cancelOrder } = await import('../kalshi.js')
+          try {
+            await cancelOrder(p.order_id)
+            return { content: [{ type: 'text' as const, text: `Order ${p.order_id} cancelled.` }], details: {} }
+          } catch (err: any) {
+            return { content: [{ type: 'text' as const, text: `Cancel failed: ${err.message}` }], details: {} }
+          }
+        },
+      },
+    )
+  }
 
   // ── System prompt ─────────────────────────────────────────────────────────
   const ctx = latestContext

@@ -67,8 +67,8 @@ program
 // ── Pre-action guard: check configuration ────────────────────────────────────
 const NO_CONFIG_COMMANDS = new Set(['setup', 'help', 'scan', 'explore', 'milestones', 'forecast', 'settlements', 'balance', 'orders', 'fills', 'schedule', 'announcements', 'history'])
 
-program.hook('preAction', (thisCommand) => {
-  const cmdName = thisCommand.name()
+program.hook('preAction', (thisCommand, actionCommand) => {
+  const cmdName = actionCommand.name()
   if (NO_CONFIG_COMMANDS.has(cmdName)) return
 
   // --api-key flag overrides config check

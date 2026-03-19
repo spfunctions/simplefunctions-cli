@@ -73,11 +73,11 @@ async function validateSFKey(key: string, apiUrl: string): Promise<{ valid: bool
     const res = await fetch(`${apiUrl}/api/thesis`, {
       headers: { 'Authorization': `Bearer ${key}` },
     })
-    if (res.ok) return { valid: true, msg: `API Key 有效 — 连接到 ${apiUrl.replace('https://', '')}` }
-    if (res.status === 401) return { valid: false, msg: '无效 key，请重试' }
-    return { valid: false, msg: `服务器返回 ${res.status}` }
+    if (res.ok) return { valid: true, msg: `API key valid — connected to ${apiUrl.replace('https://', '')}` }
+    if (res.status === 401) return { valid: false, msg: 'Invalid key, please try again' }
+    return { valid: false, msg: `Server returned ${res.status}` }
   } catch (err: any) {
-    return { valid: false, msg: `连接失败: ${err.message}` }
+    return { valid: false, msg: `Connection failed: ${err.message}` }
   }
 }
 
@@ -86,20 +86,20 @@ async function validateOpenRouterKey(key: string): Promise<{ valid: boolean; msg
     const res = await fetch('https://openrouter.ai/api/v1/models', {
       headers: { 'Authorization': `Bearer ${key}` },
     })
-    if (res.ok) return { valid: true, msg: 'OpenRouter 连接正常 — 可用模型: claude-sonnet-4.6' }
-    return { valid: false, msg: `OpenRouter 返回 ${res.status}` }
+    if (res.ok) return { valid: true, msg: 'OpenRouter connected — available model: claude-sonnet-4.6' }
+    return { valid: false, msg: `OpenRouter returned ${res.status}` }
   } catch (err: any) {
-    return { valid: false, msg: `连接失败: ${err.message}` }
+    return { valid: false, msg: `Connection failed: ${err.message}` }
   }
 }
 
 async function validateKalshi(): Promise<{ valid: boolean; msg: string; posCount: number }> {
   try {
     const positions = await getPositions()
-    if (positions === null) return { valid: false, msg: 'Kalshi 认证失败', posCount: 0 }
-    return { valid: true, msg: `Kalshi 认证成功 — 发现 ${positions.length} 个持仓`, posCount: positions.length }
+    if (positions === null) return { valid: false, msg: 'Kalshi authentication failed', posCount: 0 }
+    return { valid: true, msg: `Kalshi authenticated — found ${positions.length} position(s)`, posCount: positions.length }
   } catch (err: any) {
-    return { valid: false, msg: `Kalshi 连接失败: ${err.message}`, posCount: 0 }
+    return { valid: false, msg: `Kalshi connection failed: ${err.message}`, posCount: 0 }
   }
 }
 
@@ -110,10 +110,10 @@ async function validateTavily(key: string): Promise<{ valid: boolean; msg: strin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ api_key: key, query: 'test', max_results: 1 }),
     })
-    if (res.ok) return { valid: true, msg: 'Tavily 连接正常' }
-    return { valid: false, msg: `Tavily 返回 ${res.status}` }
+    if (res.ok) return { valid: true, msg: 'Tavily connected' }
+    return { valid: false, msg: `Tavily returned ${res.status}` }
   } catch (err: any) {
-    return { valid: false, msg: `连接失败: ${err.message}` }
+    return { valid: false, msg: `Connection failed: ${err.message}` }
   }
 }
 
@@ -137,9 +137,9 @@ export async function setupCommand(opts: SetupOpts): Promise<void> {
   // ── sf setup --reset ──────────────────────────────────────────────────────
   if (opts.reset) {
     resetConfig()
-    ok('配置已重置')
+    ok('Config reset')
     blank()
-    info('运行 sf setup 重新配置')
+    info('Run sf setup to reconfigure')
     blank()
     return
   }
@@ -155,7 +155,7 @@ export async function setupCommand(opts: SetupOpts): Promise<void> {
     const existing = loadFileConfig()
     saveConfig({ ...existing, apiKey: opts.key, apiUrl })
     ok(result.msg)
-    ok(`保存到 ${getConfigPath()}`)
+    ok(`Saved to ${getConfigPath()}`)
     return
   }
 
@@ -163,10 +163,10 @@ export async function setupCommand(opts: SetupOpts): Promise<void> {
   if (opts.kalshi) {
     const existing = loadFileConfig()
     blank()
-    console.log(`  ${bold('重新配置 Kalshi 凭证')}`)
+    console.log(`  ${bold('Reconfigure Kalshi Credentials')}`)
     blank()
-    info('去 https://kalshi.com/account/api-keys 生成新的 API key。')
-    info('如果需要交易功能，确保勾选 read+write 权限。')
+    info('Go to https://kalshi.com/account/api-keys to generate a new API key.')
+    info('If you need trading, make sure to enable read+write permissions.')
     blank()
     await promptForKalshi(existing)
     saveConfig(existing)
@@ -203,7 +203,7 @@ export async function setupCommand(opts: SetupOpts): Promise<void> {
 async function showCheck(): Promise<void> {
   const config = loadConfig()
   blank()
-  console.log(`  ${bold('SimpleFunctions 配置状态')}`)
+  console.log(`  ${bold('SimpleFunctions Config Status')}`)
   console.log(`  ${dim('─'.repeat(35))}`)
   blank()
 
@@ -211,39 +211,39 @@ async function showCheck(): Promise<void> {
   if (config.apiKey) {
     ok(`SF_API_KEY        ${dim(mask(config.apiKey))}`)
   } else {
-    fail('SF_API_KEY        未配置（必须）')
+    fail('SF_API_KEY        not configured (required)')
   }
 
   // OpenRouter
   if (config.openrouterKey) {
     ok(`OPENROUTER_KEY    ${dim(mask(config.openrouterKey))}`)
   } else {
-    fail(`OPENROUTER_KEY    未配置（agent 不可用）`)
+    fail(`OPENROUTER_KEY    not configured (agent unavailable)`)
   }
 
   // Kalshi
   if (config.kalshiKeyId && config.kalshiPrivateKeyPath) {
     ok(`KALSHI            ${dim(mask(config.kalshiKeyId))}`)
   } else {
-    info(`${dim('○')} KALSHI            ${dim('跳过')}`)
+    info(`${dim('○')} KALSHI            ${dim('skipped')}`)
   }
 
   // Tavily
   if (config.tavilyKey) {
     ok(`TAVILY            ${dim(mask(config.tavilyKey))}`)
   } else {
-    info(`${dim('○')} TAVILY            ${dim('跳过')}`)
+    info(`${dim('○')} TAVILY            ${dim('skipped')}`)
   }
 
   // Trading
   if (config.tradingEnabled) {
-    ok('TRADING           已启用')
+    ok('TRADING           enabled')
   } else {
-    info(`${dim('○')} TRADING           ${dim('未启用 — sf setup --enable-trading')}`)
+    info(`${dim('○')} TRADING           ${dim('disabled — sf setup --enable-trading')}`)
   }
 
   blank()
-  console.log(`  ${dim('配置文件: ' + getConfigPath())}`)
+  console.log(`  ${dim('Config file: ' + getConfigPath())}`)
   blank()
 }
 
@@ -261,19 +261,19 @@ async function runWizard(): Promise<void> {
   // ════════════════════════════════════════════════════════════════════════════
   // Step 1: SF API Key
   // ════════════════════════════════════════════════════════════════════════════
-  console.log(`  ${bold('第 1 步：API Key')}`)
+  console.log(`  ${bold('Step 1: API Key')}`)
   blank()
 
   const existingSfKey = process.env.SF_API_KEY || config.apiKey
   if (existingSfKey) {
     const result = await validateSFKey(existingSfKey, apiUrl)
     if (result.valid) {
-      ok(`已检测到 SF_API_KEY — ${dim(mask(existingSfKey))}`)
-      info(dim('跳过。'))
+      ok(`Detected SF_API_KEY — ${dim(mask(existingSfKey))}`)
+      info(dim('Skipping.'))
       config.apiKey = existingSfKey
       blank()
     } else {
-      fail(`已有 key 无效: ${result.msg}`)
+      fail(`Existing key invalid: ${result.msg}`)
       config.apiKey = await promptForSFKey(apiUrl)
     }
   } else {
@@ -289,19 +289,19 @@ async function runWizard(): Promise<void> {
   // ════════════════════════════════════════════════════════════════════════════
   // Step 2: OpenRouter API Key
   // ════════════════════════════════════════════════════════════════════════════
-  console.log(`  ${bold('第 2 步：AI 模型（用于 sf agent）')}`)
+  console.log(`  ${bold('Step 2: AI Model (for sf agent)')}`)
   blank()
 
   const existingOrKey = process.env.OPENROUTER_API_KEY || config.openrouterKey
   if (existingOrKey) {
     const result = await validateOpenRouterKey(existingOrKey)
     if (result.valid) {
-      ok(`已检测到 OPENROUTER_API_KEY — ${dim(mask(existingOrKey))}`)
-      info(dim('跳过。'))
+      ok(`Detected OPENROUTER_API_KEY — ${dim(mask(existingOrKey))}`)
+      info(dim('Skipping.'))
       config.openrouterKey = existingOrKey
       blank()
     } else {
-      fail(`已有 key 无效: ${result.msg}`)
+      fail(`Existing key invalid: ${result.msg}`)
       config.openrouterKey = await promptForOpenRouterKey()
     }
   } else {
@@ -314,7 +314,7 @@ async function runWizard(): Promise<void> {
   // ════════════════════════════════════════════════════════════════════════════
   // Step 3: Kalshi Exchange
   // ════════════════════════════════════════════════════════════════════════════
-  console.log(`  ${bold('第 3 步：Kalshi 交易所（可选）')}`)
+  console.log(`  ${bold('Step 3: Kalshi Exchange (optional)')}`)
   blank()
 
   const existingKalshiId = process.env.KALSHI_API_KEY_ID || config.kalshiKeyId
@@ -325,13 +325,13 @@ async function runWizard(): Promise<void> {
     process.env.KALSHI_PRIVATE_KEY_PATH = existingKalshiPath
     const result = await validateKalshi()
     if (result.valid) {
-      ok(`已检测到 Kalshi — ${dim(mask(existingKalshiId))} (${result.posCount} 个持仓)`)
-      info(dim('跳过。'))
+      ok(`Detected Kalshi — ${dim(mask(existingKalshiId))} (${result.posCount} position(s))`)
+      info(dim('Skipping.'))
       config.kalshiKeyId = existingKalshiId
       config.kalshiPrivateKeyPath = existingKalshiPath
       blank()
     } else {
-      fail(`已有凭证无效: ${result.msg}`)
+      fail(`Existing credentials invalid: ${result.msg}`)
       await promptForKalshi(config)
     }
   } else {
@@ -343,19 +343,19 @@ async function runWizard(): Promise<void> {
   // ════════════════════════════════════════════════════════════════════════════
   // Step 4: Tavily
   // ════════════════════════════════════════════════════════════════════════════
-  console.log(`  ${bold('第 4 步：新闻搜索（可选）')}`)
+  console.log(`  ${bold('Step 4: News Search (optional)')}`)
   blank()
 
   const existingTavily = process.env.TAVILY_API_KEY || config.tavilyKey
   if (existingTavily) {
     const result = await validateTavily(existingTavily)
     if (result.valid) {
-      ok(`已检测到 TAVILY_API_KEY — ${dim(mask(existingTavily))}`)
-      info(dim('跳过。'))
+      ok(`Detected TAVILY_API_KEY — ${dim(mask(existingTavily))}`)
+      info(dim('Skipping.'))
       config.tavilyKey = existingTavily
       blank()
     } else {
-      fail(`已有 key 无效: ${result.msg}`)
+      fail(`Existing key invalid: ${result.msg}`)
       config.tavilyKey = await promptForTavily()
     }
   } else {
@@ -369,17 +369,17 @@ async function runWizard(): Promise<void> {
   // Step 5: Trading
   // ════════════════════════════════════════════════════════════════════════════
   if (config.kalshiKeyId) {
-    console.log(`  ${bold('第 5 步：交易功能（可选）')}`)
+    console.log(`  ${bold('Step 5: Trading (optional)')}`)
     blank()
-    info('⚠️  启用后 sf buy / sf sell / sf cancel 可用。')
-    info('你的 Kalshi API key 必须有 read+write 权限。')
+    info('Warning: enabling this unlocks sf buy / sf sell / sf cancel.')
+    info('Your Kalshi API key must have read+write permissions.')
     blank()
-    const enableTrading = await promptYN('  启用交易功能？(y/N) ', false)
+    const enableTrading = await promptYN('  Enable trading? (y/N) ', false)
     config.tradingEnabled = enableTrading
     if (enableTrading) {
-      ok('交易功能已启用')
+      ok('Trading enabled')
     } else {
-      info(dim('跳过。之后可以 sf setup --enable-trading 启用。'))
+      info(dim('Skipped. You can enable later with sf setup --enable-trading.'))
     }
     blank()
     saveConfig(config)
@@ -389,20 +389,20 @@ async function runWizard(): Promise<void> {
   // Summary
   // ════════════════════════════════════════════════════════════════════════════
   console.log(`  ${dim('─'.repeat(25))}`)
-  info(`配置保存到 ${dim(getConfigPath())}`)
+  info(`Config saved to ${dim(getConfigPath())}`)
   blank()
 
-  if (config.apiKey) ok('SF_API_KEY        已配置')
-  else fail('SF_API_KEY        未配置')
+  if (config.apiKey) ok('SF_API_KEY        configured')
+  else fail('SF_API_KEY        not configured')
 
-  if (config.openrouterKey) ok('OPENROUTER_KEY    已配置')
-  else fail('OPENROUTER_KEY    跳过')
+  if (config.openrouterKey) ok('OPENROUTER_KEY    configured')
+  else fail('OPENROUTER_KEY    skipped')
 
-  if (config.kalshiKeyId) ok('KALSHI            已配置')
-  else info(`${dim('○')} KALSHI            跳过`)
+  if (config.kalshiKeyId) ok('KALSHI            configured')
+  else info(`${dim('○')} KALSHI            skipped`)
 
-  if (config.tavilyKey) ok('TAVILY            已配置')
-  else info(`${dim('○')} TAVILY            跳过`)
+  if (config.tavilyKey) ok('TAVILY            configured')
+  else info(`${dim('○')} TAVILY            skipped`)
 
   blank()
 
@@ -417,8 +417,8 @@ async function runWizard(): Promise<void> {
 // ─── Step prompt helpers ─────────────────────────────────────────────────────
 
 async function promptForSFKey(apiUrl: string): Promise<string> {
-  info(`还没有 key？去 ${cyan('https://simplefunctions.dev/dashboard')} 注册获取。`)
-  info('按 Enter 打开浏览器，或直接粘贴你的 key：')
+  info(`Don't have a key? Sign up at ${cyan('https://simplefunctions.dev/dashboard')}.`)
+  info('Press Enter to open browser, or paste your key:')
   blank()
 
   while (true) {
@@ -427,11 +427,11 @@ async function promptForSFKey(apiUrl: string): Promise<string> {
     if (!answer) {
       // Open browser
       openBrowser('https://simplefunctions.dev/dashboard')
-      info(dim('浏览器已打开。获取 key 后粘贴到这里：'))
+      info(dim('Browser opened. Paste your key here once you have it:'))
       continue
     }
 
-    info(dim('验证中...'))
+    info(dim('Validating...'))
     const result = await validateSFKey(answer, apiUrl)
     if (result.valid) {
       ok(result.msg)
@@ -444,44 +444,44 @@ async function promptForSFKey(apiUrl: string): Promise<string> {
 }
 
 async function promptForOpenRouterKey(): Promise<string | undefined> {
-  info(`需要 OpenRouter API key。去 ${cyan('https://openrouter.ai/settings/keys')} 获取。`)
-  info('按 Enter 跳过（agent 功能不可用），或粘贴 key：')
+  info(`Requires an OpenRouter API key. Get one at ${cyan('https://openrouter.ai/settings/keys')}.`)
+  info('Press Enter to skip (agent unavailable), or paste key:')
   blank()
 
   const answer = await prompt('  > ')
   if (!answer) {
-    info(dim('跳过。'))
+    info(dim('Skipped.'))
     blank()
     return undefined
   }
 
-  info(dim('验证中...'))
+  info(dim('Validating...'))
   const result = await validateOpenRouterKey(answer)
   if (result.valid) {
     ok(result.msg)
   } else {
     fail(result.msg)
-    info(dim('已保存，之后可以重新运行 sf setup 修正。'))
+    info(dim('Saved. You can re-run sf setup later to fix this.'))
   }
   blank()
   return answer
 }
 
 async function promptForKalshi(config: SFConfig): Promise<void> {
-  info(`连接 Kalshi 查看你的持仓和盈亏。`)
-  info(`需要 API Key ID 和私钥文件。`)
-  info(`${cyan('https://kalshi.com/account/api-keys')} 获取。`)
-  info('按 Enter 跳过，或粘贴 Key ID：')
+  info(`Connect Kalshi to view your positions and P&L.`)
+  info(`Requires an API Key ID and private key file.`)
+  info(`Get them at ${cyan('https://kalshi.com/account/api-keys')}.`)
+  info('Press Enter to skip, or paste Key ID:')
   blank()
 
   const keyId = await prompt('  > ')
   if (!keyId) {
-    info(dim('跳过。'))
+    info(dim('Skipped.'))
     blank()
     return
   }
 
-  info('私钥文件路径（默认 ~/.kalshi/private.pem）：')
+  info('Private key file path (default ~/.kalshi/private.pem):')
   const keyPathInput = await prompt('  > ')
   const keyPath = keyPathInput || '~/.kalshi/private.pem'
 
@@ -492,37 +492,37 @@ async function promptForKalshi(config: SFConfig): Promise<void> {
   process.env.KALSHI_API_KEY_ID = keyId
   process.env.KALSHI_PRIVATE_KEY_PATH = keyPath
 
-  info(dim('验证中...'))
+  info(dim('Validating...'))
   const result = await validateKalshi()
   if (result.valid) {
     ok(result.msg)
   } else {
     fail(result.msg)
-    info(dim('已保存，之后可以重新运行 sf setup 修正。'))
+    info(dim('Saved. You can re-run sf setup later to fix this.'))
   }
   blank()
 }
 
 async function promptForTavily(): Promise<string | undefined> {
-  info(`Tavily API 用于 agent 的 web_search 功能。`)
-  info(`${cyan('https://tavily.com')} 获取免费 key。`)
-  info('按 Enter 跳过：')
+  info(`Tavily API powers the agent's web_search tool.`)
+  info(`Get a free key at ${cyan('https://tavily.com')}.`)
+  info('Press Enter to skip:')
   blank()
 
   const answer = await prompt('  > ')
   if (!answer) {
-    info(dim('跳过。'))
+    info(dim('Skipped.'))
     blank()
     return undefined
   }
 
-  info(dim('验证中...'))
+  info(dim('Validating...'))
   const result = await validateTavily(answer)
   if (result.valid) {
     ok(result.msg)
   } else {
     fail(result.msg)
-    info(dim('已保存，之后可以重新运行 sf setup 修正。'))
+    info(dim('Saved. You can re-run sf setup later to fix this.'))
   }
   blank()
   return answer
@@ -538,72 +538,72 @@ async function handleThesisStep(config: SFConfig): Promise<void> {
     const activeTheses = theses.filter((t: any) => t.status === 'active')
 
     if (activeTheses.length > 0) {
-      console.log(`  ${bold('第 6 步：论文')}`)
+      console.log(`  ${bold('Step 6: Theses')}`)
       blank()
-      ok(`已有 ${activeTheses.length} 个活跃论文：`)
+      ok(`Found ${activeTheses.length} active thesis(es):`)
       for (const t of activeTheses.slice(0, 5)) {
         const conf = typeof t.confidence === 'number' ? Math.round(t.confidence * 100) : 0
         const thesis = (t.rawThesis || t.thesis || t.title || '').slice(0, 60)
         info(`  ${dim(t.id.slice(0, 8))} — ${thesis} — ${conf}%`)
       }
-      info(dim('跳过创建。'))
+      info(dim('Skipping creation.'))
       blank()
 
       // Offer to launch agent
       if (config.openrouterKey) {
         console.log(`  ${dim('─'.repeat(25))}`)
-        console.log(`  ${bold('全部就绪！')}`)
+        console.log(`  ${bold('All set!')}`)
         blank()
-        info(`  ${cyan('sf agent')}             和你的论文对话`)
-        info(`  ${cyan('sf context <id>')}      查看论文快照`)
-        info(`  ${cyan('sf positions')}         查看持仓`)
-        info(`  ${cyan('sf setup --check')}     检查配置`)
+        info(`  ${cyan('sf agent')}             Chat with your thesis`)
+        info(`  ${cyan('sf context <id>')}      View thesis snapshot`)
+        info(`  ${cyan('sf positions')}         View positions`)
+        info(`  ${cyan('sf setup --check')}     Check config`)
         blank()
 
-        const shouldLaunch = await promptYN(`  要不要现在启动 agent？(Y/n) `)
+        const shouldLaunch = await promptYN(`  Launch agent now? (Y/n) `)
         if (shouldLaunch) {
           blank()
-          info('启动中...')
+          info('Launching...')
           blank()
           await agentCommand(activeTheses[0].id, { model: config.model })
         }
       } else {
         blank()
-        console.log(`  ${bold('全部就绪！')}`)
+        console.log(`  ${bold('All set!')}`)
         blank()
-        info(`  ${cyan('sf list')}              查看所有论文`)
-        info(`  ${cyan('sf context <id>')}      查看论文快照`)
-        info(`  ${cyan('sf positions')}         查看持仓`)
-        info(`  ${cyan('sf setup --check')}     检查配置`)
+        info(`  ${cyan('sf list')}              List all theses`)
+        info(`  ${cyan('sf context <id>')}      View thesis snapshot`)
+        info(`  ${cyan('sf positions')}         View positions`)
+        info(`  ${cyan('sf setup --check')}     Check config`)
         blank()
       }
       return
     }
 
     // No theses — offer to create one
-    console.log(`  ${bold('第 6 步：创建你的第一个论文')}`)
+    console.log(`  ${bold('Step 6: Create Your First Thesis')}`)
     blank()
-    info('论文是你对市场的一个核心判断。系统会基于它构建因果模型，')
-    info('然后持续扫描预测市场寻找被错误定价的合约。')
+    info('A thesis is your core market conviction. The system builds a causal model')
+    info('from it, then continuously scans prediction markets for mispriced contracts.')
     blank()
-    info('比如：')
-    info(`  ${dim('"美联储2026年不会降息，通胀因油价持续高企"')}`)
-    info(`  ${dim('"AI裁员潮导致消费萎缩，标普年底跌20%"')}`)
-    info(`  ${dim('"Trump无法退出伊朗战争，油价维持$100以上六个月"')}`)
+    info('Examples:')
+    info(`  ${dim('"The Fed won\'t cut rates in 2026 — inflation stays elevated due to oil prices"')}`)
+    info(`  ${dim('"AI-driven layoffs cause consumer spending to contract, S&P drops 20% by year-end"')}`)
+    info(`  ${dim('"Trump can\'t exit the Iran conflict — oil stays above $100 for six months"')}`)
     blank()
 
-    const thesis = await prompt('  输入你的论文（按 Enter 跳过，之后用 sf create）：\n  > ')
+    const thesis = await prompt('  Enter your thesis (press Enter to skip, use sf create later):\n  > ')
 
     if (!thesis) {
       blank()
-      info(dim('跳过。之后用 sf create "你的论文" 创建。'))
+      info(dim('Skipped. Use sf create "your thesis" to create one later.'))
       blank()
       showFinalHints(config)
       return
     }
 
     blank()
-    info('构建因果模型中...（约30秒）')
+    info('Building causal model... (~30s)')
     blank()
 
     try {
@@ -615,22 +615,22 @@ async function handleThesisStep(config: SFConfig): Promise<void> {
         const totalMarkets = result.edgeAnalysis?.totalMarketsAnalyzed || 0
         const confidence = Math.round((parseFloat(result.confidence) || 0.5) * 100)
 
-        ok(`因果树：${nodeCount} 个节点`)
-        ok(`扫描 ${totalMarkets} 个市场，找到 ${edgeCount} 个有边际的合约`)
-        ok(`置信度：${confidence}%`)
-        ok(`论文 ID：${result.id.slice(0, 8)}`)
+        ok(`Causal tree: ${nodeCount} node(s)`)
+        ok(`Scanned ${totalMarkets} markets, found ${edgeCount} contract(s) with edge`)
+        ok(`Confidence: ${confidence}%`)
+        ok(`Thesis ID: ${result.id.slice(0, 8)}`)
         blank()
 
         // Offer to launch agent
         if (config.openrouterKey) {
           console.log(`  ${dim('─'.repeat(25))}`)
-          console.log(`  ${bold('全部就绪！')}`)
+          console.log(`  ${bold('All set!')}`)
           blank()
 
-          const shouldLaunch = await promptYN(`  要不要现在启动 agent？(Y/n) `)
+          const shouldLaunch = await promptYN(`  Launch agent now? (Y/n) `)
           if (shouldLaunch) {
             blank()
-            info('启动中...')
+            info('Launching...')
             blank()
             await agentCommand(result.id, { model: config.model })
           } else {
@@ -641,14 +641,14 @@ async function handleThesisStep(config: SFConfig): Promise<void> {
           showFinalHints(config)
         }
       } else {
-        fail(`创建失败：${result.error || '未知错误'}`)
-        info(dim('之后可以用 sf create "你的论文" 重试'))
+        fail(`Creation failed: ${result.error || 'unknown error'}`)
+        info(dim('You can retry later with sf create "your thesis"'))
         blank()
         showFinalHints(config)
       }
     } catch (err: any) {
-      fail(`创建失败：${err.message}`)
-      info(dim('之后可以用 sf create "你的论文" 重试'))
+      fail(`Creation failed: ${err.message}`)
+      info(dim('You can retry later with sf create "your thesis"'))
       blank()
       showFinalHints(config)
     }
@@ -661,12 +661,12 @@ async function handleThesisStep(config: SFConfig): Promise<void> {
 
 function showFinalHints(config: SFConfig) {
   console.log(`  ${dim('─'.repeat(25))}`)
-  console.log(`  ${bold('全部就绪！')}`)
+  console.log(`  ${bold('All set!')}`)
   blank()
-  info(`  ${cyan('sf agent')}             和你的论文对话`)
-  info(`  ${cyan('sf list')}              查看所有论文`)
-  info(`  ${cyan('sf context <id>')}      查看论文快照`)
-  info(`  ${cyan('sf positions')}         查看持仓`)
-  info(`  ${cyan('sf setup --check')}     检查配置`)
+  info(`  ${cyan('sf agent')}             Chat with your thesis`)
+  info(`  ${cyan('sf list')}              List all theses`)
+  info(`  ${cyan('sf context <id>')}      View thesis snapshot`)
+  info(`  ${cyan('sf positions')}         View positions`)
+  info(`  ${cyan('sf setup --check')}     Check config`)
   blank()
 }

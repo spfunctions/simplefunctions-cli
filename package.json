@@ -1,6 +1,6 @@
 {
   "name": "@spfunctions/cli",
-  "version": "1.1.8",
+  "version": "1.3.0",
   "description": "Prediction market intelligence CLI. Causal thesis model, 24/7 Kalshi/Polymarket scan, live orderbook, edge detection. Interactive agent mode with tool calling.",
   "bin": {
     "sf": "./dist/index.js"
@@ -37,9 +37,8 @@
     "edge-detection"
   ],
   "license": "MIT",
-  "homepage": "https://simplefunctions.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/simplefunctions/simplefunctions-cli"
+    "url": "https://github.com/spfunctions/simplefunctions-cli"
   }
 }
