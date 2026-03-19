@@ -6,11 +6,38 @@ import { SFClient } from '../client.js'
 import { getFills, getBatchCandlesticks, isKalshiConfigured } from '../kalshi.js'
 import { loadConfig } from '../config.js'
 import { c, pad, rpad } from '../utils.js'
+import { RISK_CATEGORIES } from '../topics.js'
 
-/** Abbreviate ticker: KXWTIMAX-26DEC31-T135 -> T135 */
+/** Abbreviate ticker to something readable:
+ *  KXWTIMAX-26DEC31-T135 → Oil 135
+ *  KXRECSSNBER-26 → Recsn
+ *  KXAAAGASM-26MAR31-4.40 → Gas 4.40
+ *  KXINXY-26DEC31H1600-T4000 → S&P 4000
+ */
 function abbrevTicker(ticker: string): string {
+  // Short topic names for performance table
+  const SHORT_TOPICS: Record<string, string> = {
+    KXWTIMAX: 'Oil', KXWTI: 'Oil', KXRECSSNBER: 'Recsn',
+    KXAAAGASM: 'Gas', KXCPI: 'CPI', KXINXY: 'S&P',
+    KXFEDDECISION: 'Fed', KXUNEMPLOYMENT: 'Unemp', KXCLOSEHORMUZ: 'Hormuz',
+  }
+  const sorted = Object.keys(SHORT_TOPICS).sort((a, b) => b.length - a.length)
+  let topic = ''
+  for (const prefix of sorted) {
+    if (ticker.startsWith(prefix)) {
+      topic = SHORT_TOPICS[prefix]
+      break
+    }
+  }
+
+  // Extract the meaningful suffix (strike/level)
   const parts = ticker.split('-')
-  return parts[parts.length - 1] || ticker
+  const last = parts[parts.length - 1] || ''
+  const suffix = last.startsWith('T') ? last.slice(1) : ''
+
+  if (topic && suffix) return `${topic} ${suffix}`
+  if (topic) return topic
+  return last || ticker.slice(0, 8)
 }
 
 /** Format date as "Mar 01" */
@@ -202,12 +229,12 @@ export async function performanceCommand(opts: {
     const config = loadConfig()
     const client = new SFClient(config.apiKey, config.apiUrl)
     const feedData = await client.getFeed(720)
-    const feedItems = feedData?.items || feedData?.events || feedData || []
+    const feedItems = feedData?.feed || feedData?.items || feedData?.events || feedData || []
     if (Array.isArray(feedItems)) {
       for (const item of feedItems) {
-        const confDelta = item.confidenceDelta ?? item.confidence_delta ?? 0
-        if (Math.abs(confDelta) > 0.03) {
-          const itemDate = item.createdAt || item.created_at || item.timestamp || ''
+        const confDelta = item.delta ?? item.confidenceDelta ?? item.confidence_delta ?? 0
+        if (Math.abs(confDelta) >= 0.02) {
+          const itemDate = item.evaluatedAt || item.createdAt || item.created_at || item.timestamp || ''
           if (itemDate) {
             events.push({
               date: dateKey(new Date(itemDate)),
@@ -262,7 +289,7 @@ export async function performanceCommand(opts: {
 
   // Column headers
   const abbrevs = tickers.map(t => abbrevTicker(t.ticker))
-  const colWidth = 9
+  const colWidth = 11
   const dateCol = 'Date'.padEnd(12)
   const headerCols = abbrevs.map(a => rpad(a, colWidth)).join('')
   const totalCol = rpad('Total', colWidth)
