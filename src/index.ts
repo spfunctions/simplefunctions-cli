@@ -49,6 +49,8 @@ import { scheduleCommand } from './commands/schedule.js'
 import { rfqCommand } from './commands/rfq.js'
 import { announcementsCommand } from './commands/announcements.js'
 import { historyCommand } from './commands/history.js'
+import { performanceCommand } from './commands/performance.js'
+import { liquidityCommand } from './commands/liquidity.js'
 import { die } from './utils.js'
 
 // ── Apply ~/.sf/config.json to process.env BEFORE any command ────────────────
@@ -65,7 +67,7 @@ program
   .option('--api-url <url>', 'API base URL (or set SF_API_URL env var)')
 
 // ── Pre-action guard: check configuration ────────────────────────────────────
-const NO_CONFIG_COMMANDS = new Set(['setup', 'help', 'scan', 'explore', 'milestones', 'forecast', 'settlements', 'balance', 'orders', 'fills', 'schedule', 'announcements', 'history'])
+const NO_CONFIG_COMMANDS = new Set(['setup', 'help', 'scan', 'explore', 'milestones', 'forecast', 'settlements', 'balance', 'orders', 'fills', 'schedule', 'announcements', 'history', 'liquidity'])
 
 program.hook('preAction', (thisCommand, actionCommand) => {
   const cmdName = actionCommand.name()
@@ -419,6 +421,29 @@ program
   .option('--json', 'JSON output')
   .action(async (ticker, opts) => {
     await run(() => historyCommand(ticker, opts))
+  })
+
+// ── sf performance ───────────────────────────────────────────────────────────
+program
+  .command('performance')
+  .description('Portfolio P&L over time with thesis event annotations')
+  .option('--ticker <ticker>', 'Filter by ticker (fuzzy match)')
+  .option('--since <date>', 'Start date (ISO, e.g. 2026-03-01)')
+  .option('--json', 'JSON output')
+  .action(async (opts) => {
+    await run(() => performanceCommand(opts))
+  })
+
+// ── sf liquidity ─────────────────────────────────────────────────────────────
+program
+  .command('liquidity')
+  .description('Market liquidity scanner by topic and horizon')
+  .option('--topic <topic>', 'Filter topic (oil, recession, fed, cpi, gas, sp500)')
+  .option('--horizon <horizon>', 'Filter horizon (weekly, monthly, long-term)')
+  .option('--min-depth <depth>', 'Minimum bid+ask depth', parseInt)
+  .option('--json', 'JSON output')
+  .action(async (opts) => {
+    await run(() => liquidityCommand(opts))
   })
 
 // ── sf strategies ─────────────────────────────────────────────────────────────

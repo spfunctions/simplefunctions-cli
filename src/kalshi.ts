@@ -321,6 +321,35 @@ export async function getOrderbook(ticker: string): Promise<LocalOrderbook | nul
 }
 
 // ============================================================================
+// PUBLIC ORDERBOOK (no auth)
+// ============================================================================
+
+export interface PublicOrderbook {
+  yes_dollars: Array<[string, string]>
+  no_dollars: Array<[string, string]>
+}
+
+/**
+ * Fetch orderbook for a ticker using the public (unauthenticated) endpoint.
+ * Returns raw yes_dollars/no_dollars arrays or null on failure.
+ */
+export async function getPublicOrderbook(ticker: string, depth = 20): Promise<PublicOrderbook | null> {
+  try {
+    const url = `${KALSHI_API_BASE}/markets/${ticker}/orderbook?depth=${depth}`
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    const ob = data.orderbook_fp || data.orderbook || data
+    return {
+      yes_dollars: ob.yes_dollars || ob.yes || [],
+      no_dollars: ob.no_dollars || ob.no || [],
+    }
+  } catch {
+    return null
+  }
+}
+
+// ============================================================================
 // SETTLEMENTS (Authenticated)
 // ============================================================================
 
@@ -515,6 +544,33 @@ export async function amendOrder(orderId: string, params: {
     throw new Error(`Kalshi API ${res.status}: ${text}`)
   }
   return res.json()
+}
+
+// ============================================================================
+// CANDLESTICKS (Authenticated)
+// ============================================================================
+
+export async function getBatchCandlesticks(params: {
+  tickers: string[]
+  startTs: number  // unix seconds
+  endTs: number    // unix seconds
+  periodInterval?: number  // default 1440 (daily)
+}): Promise<{ market_ticker: string; candlesticks: any[] }[]> {
+  if (!isKalshiConfigured()) return []
+  try {
+    const searchParams = new URLSearchParams()
+    searchParams.set('tickers', params.tickers.join(','))
+    searchParams.set('start_ts', params.startTs.toString())
+    searchParams.set('end_ts', params.endTs.toString())
+    searchParams.set('period_interval', (params.periodInterval ?? 1440).toString())
+    const data = await kalshiAuthGet<{ candlesticks: { market_ticker: string; candlesticks: any[] }[] }>(
+      `/markets/candlesticks?${searchParams.toString()}`
+    )
+    return data.candlesticks || []
+  } catch (err) {
+    console.warn('[Kalshi] Failed to fetch candlesticks:', err)
+    return []
+  }
 }
 
 export async function createRFQ(params: {

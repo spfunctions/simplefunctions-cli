@@ -7,19 +7,7 @@
 
 import { SFClient } from '../client.js'
 import { getPositions, getMarketPrice } from '../kalshi.js'
-
-// ── Risk category mapping by Kalshi ticker prefix ────────────────────────────
-const RISK_CATEGORIES: Record<string, string> = {
-  KXWTIMAX: 'Oil',
-  KXWTI: 'Oil',
-  KXRECSSNBER: 'Recession',
-  KXAAAGASM: 'Gas',
-  KXCPI: 'Inflation',
-  KXINXY: 'S&P 500',
-  KXFEDDECISION: 'Fed Rate',
-  KXUNEMPLOYMENT: 'Unemployment',
-  KXCLOSEHORMUZ: 'Hormuz',
-}
+import { RISK_CATEGORIES } from '../topics.js'
 
 function categorize(ticker: string): string {
   // Match longest prefix first
