@@ -779,6 +779,8 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
                   (s.ticker || '').toLowerCase().includes(kw),
               ),
             )
+            .filter((s: any) => parseFloat(s.volume_fp || '0') > 1000)
+            .sort((a: any, b: any) => parseFloat(b.volume_fp || '0') - parseFloat(a.volume_fp || '0'))
             .slice(0, 15)
           result = matched
         } else {
@@ -2371,7 +2373,7 @@ async function runPlainTextAgent(params: {
         else if (p.query) {
           const series = await kalshiFetchAllSeries()
           const kws = p.query.toLowerCase().split(/\s+/)
-          result = series.filter((s: any) => kws.every((k: string) => ((s.title||'')+(s.ticker||'')).toLowerCase().includes(k))).slice(0, 15)
+          result = series.filter((s: any) => kws.every((k: string) => ((s.title||'')+(s.ticker||'')).toLowerCase().includes(k))).filter((s: any) => parseFloat(s.volume_fp || '0') > 1000).sort((a: any, b: any) => parseFloat(b.volume_fp || '0') - parseFloat(a.volume_fp || '0')).slice(0, 15)
         } else { result = { error: 'Provide query, series, or market' } }
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], details: {} }
       },

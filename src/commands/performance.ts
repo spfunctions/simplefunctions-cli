@@ -292,6 +292,22 @@ export async function performanceCommand(opts: {
     console.log(`  ${dateStr}${cols}${totalColor}${rpad(totalStr, colWidth)}${c.reset}`)
   }
 
+  // Sparkline of total P&L
+  if (dailyRows.length >= 2) {
+    const totals = dailyRows.map(r => r.total)
+    const min = Math.min(...totals)
+    const max = Math.max(...totals)
+    const range = max - min || 1
+    const blocks = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+    const spark = totals.map(v => {
+      const idx = Math.round(((v - min) / range) * (blocks.length - 1))
+      const ch = blocks[idx]
+      return v >= 0 ? `${c.green}${ch}${c.reset}` : `${c.red}${ch}${c.reset}`
+    }).join('')
+    console.log()
+    console.log(`  ${c.dim}P&L trend:${c.reset} ${spark}`)
+  }
+
   // Events
   if (events.length > 0) {
     console.log()

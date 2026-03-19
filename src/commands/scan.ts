@@ -111,7 +111,7 @@ async function keywordScan(query: string, json?: boolean): Promise<void> {
     'iran', 'hormuz', 'war', 'tariff', 'trade', 'rate',
   ]
 
-  const matches: Array<{ series: any; score: number }> = []
+  const matches: Array<{ series: any; score: number; volume: number }> = []
   for (const s of allSeries) {
     const text = `${s.title} ${s.ticker} ${(s.tags || []).join(' ')} ${s.category}`.toLowerCase()
     let score = 0
@@ -124,15 +124,17 @@ async function keywordScan(query: string, json?: boolean): Promise<void> {
     const v = parseFloat(s.volume_fp || '0')
     if (v > 1_000_000) score += 3
     else if (v > 100_000) score += 1
-    if (score > 0) matches.push({ series: s, score })
+    if (score > 0 && v > 1000) matches.push({ series: s, score, volume: v })
   }
 
-  matches.sort((a, b) => b.score - a.score)
+  // Sort by score first, then by volume as tiebreaker
+  matches.sort((a, b) => b.score - a.score || b.volume - a.volume)
   const topSeries = matches.slice(0, 15)
 
   console.log(`\n${c.bold}Found ${matches.length} relevant series. Top ${topSeries.length}:${c.reset}\n`)
-  for (const { series: s, score } of topSeries) {
-    console.log(`  ${c.dim}[${score}]${c.reset} ${pad(s.ticker, 25)} ${s.title}`)
+  for (const { series: s, volume } of topSeries) {
+    const volStr = volume >= 1_000_000 ? `$${(volume / 1_000_000).toFixed(1)}M` : volume >= 1000 ? `$${(volume / 1000).toFixed(0)}k` : `$${volume.toFixed(0)}`
+    console.log(`  ${rpad(volStr, 10)} ${pad(s.ticker, 25)} ${s.title}`)
   }
 
   // Fetch live markets for top 10
