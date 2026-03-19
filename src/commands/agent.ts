@@ -1394,7 +1394,7 @@ When the conversation produces a concrete trade idea (specific contract, directi
 - Extract hard conditions (specific prices in cents) into entryBelow/stopLoss/takeProfit.
 - Put fuzzy conditions into softConditions (e.g. "only if n3 > 60%", "spread < 3¢").
 - Put the full reasoning into rationale.
-- After creating, confirm the strategy details and mention that sf runtime --dangerous can execute it.
+- After creating, confirm the strategy details.
 - If the user says "change the stop loss on T150 to 30", use update_strategy.
 
 ## Trading status
@@ -2779,7 +2779,7 @@ async function runPlainTextAgent(params: {
       {
         name: 'place_order',
         label: 'Place Order',
-        description: 'Place a buy or sell order on Kalshi. Executes directly (no confirmation prompt in plain mode).',
+        description: 'Place a buy or sell order on Kalshi. Shows preview and asks for confirmation.',
         parameters: Type.Object({
           ticker: Type.String({ description: 'Market ticker e.g. KXWTIMAX-26DEC31-T135' }),
           side: Type.String({ description: 'yes or no' }),
@@ -2790,10 +2790,20 @@ async function runPlainTextAgent(params: {
         }),
         execute: async (_id: string, p: any) => {
           const { createOrder } = await import('../kalshi.js')
+          const readline = await import('readline')
           const priceCents = p.price_cents ? Math.round(Number(p.price_cents)) : undefined
           const maxCost = ((priceCents || 99) * p.count / 100).toFixed(2)
 
-          process.stderr.write(`  Order: ${p.action.toUpperCase()} ${p.count}x ${p.ticker} ${p.side.toUpperCase()} @ ${priceCents ? priceCents + '\u00A2' : 'market'} (max $${maxCost})\n`)
+          const preview = `  Order: ${p.action.toUpperCase()} ${p.count}x ${p.ticker} ${p.side.toUpperCase()} @ ${priceCents ? priceCents + '\u00A2' : 'market'} (max $${maxCost})`
+          process.stderr.write(preview + '\n')
+
+          // Confirm in plain mode via readline
+          const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
+          const answer = await new Promise<string>(resolve => rl.question('  Execute? (y/n) ', resolve))
+          rl.close()
+          if (!answer.toLowerCase().startsWith('y')) {
+            return { content: [{ type: 'text' as const, text: 'Order cancelled by user.' }], details: {} }
+          }
 
           try {
             const result = await createOrder({
