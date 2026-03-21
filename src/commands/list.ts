@@ -1,9 +1,14 @@
 import { SFClient } from '../client.js'
 import { c, pad, rpad, pct, shortId, shortDate, trunc, hr } from '../utils.js'
 
-export async function listCommand(opts: { apiKey?: string; apiUrl?: string }): Promise<void> {
+export async function listCommand(opts: { json?: boolean; apiKey?: string; apiUrl?: string }): Promise<void> {
   const client = new SFClient(opts.apiKey, opts.apiUrl)
   const { theses } = await client.listTheses()
+
+  if (opts.json) {
+    console.log(JSON.stringify(theses, null, 2))
+    return
+  }
 
   if (theses.length === 0) {
     console.log(`${c.dim}No theses found.${c.reset}`)

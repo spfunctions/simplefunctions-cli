@@ -36,8 +36,19 @@ export class SFClient {
     })
 
     if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`API error ${res.status}: ${text}`)
+      let errorBody: any = null
+      try {
+        const text = await res.text()
+        errorBody = text ? JSON.parse(text) : null
+      } catch { /* not JSON */ }
+
+      const err = new Error(
+        errorBody?.error || errorBody?.message || `API error ${res.status}`
+      ) as Error & { status: number; code: string; details: any }
+      err.status = res.status
+      err.code = errorBody?.code || `HTTP_${res.status}`
+      err.details = errorBody
+      throw err
     }
 
     return res.json() as Promise<T>

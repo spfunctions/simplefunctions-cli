@@ -171,9 +171,10 @@ program
 program
   .command('list')
   .description('List all theses')
-  .action(async (_opts, cmd) => {
+  .option('--json', 'JSON output')
+  .action(async (opts, cmd) => {
     const g = cmd.optsWithGlobals()
-    await run(() => listCommand({ apiKey: g.apiKey, apiUrl: g.apiUrl }))
+    await run(() => listCommand({ json: opts.json, apiKey: g.apiKey, apiUrl: g.apiUrl }))
   })
 
 // ── sf get <id> ───────────────────────────────────────────────────────────────
@@ -201,9 +202,10 @@ program
   .command('create <thesis>')
   .description('Create a new thesis (sync by default — waits for formation)')
   .option('--async', 'Async mode — return immediately without waiting')
+  .option('--json', 'JSON output')
   .action(async (thesis, opts, cmd) => {
     const g = cmd.optsWithGlobals()
-    await run(() => createCommand(thesis, { async: opts.async, apiKey: g.apiKey, apiUrl: g.apiUrl }))
+    await run(() => createCommand(thesis, { async: opts.async, json: opts.json, apiKey: g.apiKey, apiUrl: g.apiUrl }))
   })
 
 // ── sf signal <id> <content> ──────────────────────────────────────────────────
