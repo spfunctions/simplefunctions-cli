@@ -555,8 +555,17 @@ registerStrategies(program)
 async function run(fn: () => Promise<void>): Promise<void> {
   try {
     await fn()
-  } catch (err) {
+  } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err)
+    // If --json flag is present, output structured JSON error
+    if (process.argv.includes('--json')) {
+      console.log(JSON.stringify({
+        error: msg,
+        code: err.code || 'CLI_ERROR',
+        status: err.status || 1,
+      }))
+      process.exit(1)
+    }
     die(msg)
   }
 }
