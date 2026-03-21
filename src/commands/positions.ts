@@ -12,6 +12,8 @@
 
 import { SFClient } from '../client.js'
 import { getPositions, getMarketPrice, getOrderbook, isKalshiConfigured, type KalshiPosition, type LocalOrderbook } from '../kalshi.js'
+import { polymarketGetPositions } from '../polymarket.js'
+import { loadConfig } from '../config.js'
 import { c, pad, rpad, vol, header, hr, shortId } from '../utils.js'
 
 interface PositionsOpts {
@@ -29,6 +31,18 @@ export async function positionsCommand(opts: PositionsOpts): Promise<void> {
   if (isKalshiConfigured()) {
     console.log(`${c.dim}Fetching Kalshi positions...${c.reset}`)
     positions = await getPositions()
+  }
+
+  // ── Step 1b: Fetch Polymarket positions (if wallet configured) ──
+  const config = loadConfig()
+  let polyPositions: any[] = []
+  if (config.polymarketWalletAddress) {
+    console.log(`${c.dim}Fetching Polymarket positions...${c.reset}`)
+    try {
+      polyPositions = await polymarketGetPositions(config.polymarketWalletAddress)
+    } catch {
+      // skip
+    }
   }
 
   // ── Step 2: Fetch all theses and their edges (via SF API) ──
@@ -106,7 +120,9 @@ export async function positionsCommand(opts: PositionsOpts): Promise<void> {
   if (opts.json) {
     console.log(JSON.stringify({
       kalshiConfigured: isKalshiConfigured(),
+      polymarketConfigured: !!config.polymarketWalletAddress,
       positions: positions || [],
+      polymarketPositions: polyPositions,
       edges: allEdges.map(e => ({ ...e.edge, thesisId: e.thesisId })),
     }, null, 2))
     return
@@ -180,6 +196,47 @@ export async function positionsCommand(opts: PositionsOpts): Promise<void> {
     console.log(`\n${c.dim}No open positions on Kalshi.${c.reset}\n`)
   } else {
     console.log(`\n${c.yellow}Kalshi not configured.${c.reset} Set KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH to see positions.\n`)
+  }
+
+  // C) Polymarket positions
+  if (polyPositions.length > 0) {
+    header('Polymarket Positions')
+
+    console.log(
+      '  ' + c.bold +
+      pad('Market', 35) +
+      rpad('Side', 5) +
+      rpad('Size', 8) +
+      rpad('Avg', 6) +
+      rpad('Now', 6) +
+      rpad('P&L', 9) +
+      c.reset
+    )
+    console.log('  ' + c.dim + '─'.repeat(75) + c.reset)
+
+    for (const pos of polyPositions) {
+      const title = (pos.title || pos.slug || pos.asset || '').slice(0, 34)
+      const side = pos.outcome || 'YES'
+      const size = pos.size || 0
+      const avgPrice = Math.round((pos.avgPrice || 0) * 100)
+      const curPrice = Math.round((pos.curPrice || pos.currentPrice || 0) * 100)
+      const pnl = pos.cashPnl || ((curPrice - avgPrice) * size / 100)
+      const pnlColor = pnl >= 0 ? c.green : c.red
+      const pnlStr = pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`
+
+      console.log(
+        '  ' +
+        pad(title, 35) +
+        rpad(side.toUpperCase(), 5) +
+        rpad(String(Math.round(size)), 8) +
+        rpad(`${avgPrice}¢`, 6) +
+        rpad(`${curPrice}¢`, 6) +
+        `${pnlColor}${rpad(pnlStr, 9)}${c.reset}`
+      )
+    }
+    console.log('')
+  } else if (config.polymarketWalletAddress) {
+    console.log(`${c.dim}No open positions on Polymarket.${c.reset}\n`)
   }
 
   // B) Unpositioned edges (edges without matching positions)

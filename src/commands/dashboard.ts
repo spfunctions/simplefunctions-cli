@@ -1,16 +1,20 @@
 /**
- * sf dashboard — Portfolio overview
+ * sf dashboard — Commander entry point
  *
- * One-screen summary: theses, positions, risk exposure, top unpositioned edges.
- * Uses existing APIs + local Kalshi positions.
+ * Three modes:
+ *   --json   → dump current state as JSON
+ *   --once   → one-time formatted print (no interactive TUI)
+ *   default  → launch interactive TUI dashboard
  */
 
 import { SFClient } from '../client.js'
-import { getPositions, getMarketPrice } from '../kalshi.js'
+import { getPositions, getMarketPrice, getOrders, getBalance, isKalshiConfigured } from '../kalshi.js'
+import { polymarketGetPositions } from '../polymarket.js'
+import { loadConfig } from '../config.js'
 import { RISK_CATEGORIES } from '../topics.js'
+import { startDashboard } from '../tui/dashboard.js'
 
 function categorize(ticker: string): string {
-  // Match longest prefix first
   const sorted = Object.keys(RISK_CATEGORIES).sort((a, b) => b.length - a.length)
   for (const prefix of sorted) {
     if (ticker.startsWith(prefix)) return RISK_CATEGORIES[prefix]
@@ -28,10 +32,21 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`
 }
 
-export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string; apiUrl?: string }) {
+export async function dashboardCommand(opts?: {
+  json?: boolean
+  once?: boolean
+  apiKey?: string
+  apiUrl?: string
+}): Promise<void> {
+  // ── Default: interactive TUI ──
+  if (!opts?.json && !opts?.once) {
+    await startDashboard()
+    return
+  }
+
+  // ── JSON or one-time print modes (legacy behavior) ──
   const client = new SFClient(opts?.apiKey, opts?.apiUrl)
 
-  // ── Fetch data in parallel ─────────────────────────────────────────────────
   const [thesesResult, positions] = await Promise.all([
     client.listTheses(),
     getPositions().catch(() => null),
@@ -61,7 +76,7 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
     }
   }
 
-  // ── Collect all edges across all theses ────────────────────────────────────
+  // Collect all edges across all theses
   const allEdges: any[] = []
   for (const ctx of contexts) {
     if (!ctx?.edges) continue
@@ -82,29 +97,51 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
   // Find positioned tickers
   const positionedTickers = new Set(positions?.map((p: any) => p.ticker) || [])
 
-  // Unpositioned edges = edges where no position exists on that marketId
+  // Unpositioned edges
   const unpositionedEdges = [...edgeMap.values()]
     .filter(e => !positionedTickers.has(e.marketId))
     .sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge))
     .slice(0, 10)
 
-  // ── JSON output ────────────────────────────────────────────────────────────
+  // Fetch additional data for JSON mode
+  const [orders, balance, polyPositions] = await Promise.all([
+    opts?.json ? getOrders({ status: 'resting' }).catch(() => []) : Promise.resolve([]),
+    opts?.json ? getBalance().catch(() => null) : Promise.resolve(null),
+    opts?.json && loadConfig().polymarketWalletAddress
+      ? polymarketGetPositions(loadConfig().polymarketWalletAddress!).catch(() => [])
+      : Promise.resolve([]),
+  ])
+
+  // Fetch feed for recent evaluations
+  let feed: any[] = []
+  if (opts?.json) {
+    try { feed = (await client.getFeed(24, 20)).evaluations || [] } catch { /* skip */ }
+  }
+
+  // ── JSON output ──
   if (opts?.json) {
     console.log(JSON.stringify({
       theses,
-      positions,
+      positions: positions || [],
+      polymarketPositions: polyPositions,
+      orders,
+      balance,
       unpositionedEdges,
+      feed,
+      kalshiConfigured: isKalshiConfigured(),
+      polymarketConfigured: !!loadConfig().polymarketWalletAddress,
+      timestamp: new Date().toISOString(),
     }, null, 2))
     return
   }
 
-  // ── Formatted output ───────────────────────────────────────────────────────
+  // ── One-time formatted output ──
   console.log()
   console.log('  SimpleFunctions Dashboard')
-  console.log('  ' + '─'.repeat(50))
+  console.log('  ' + '\u2500'.repeat(50))
   console.log()
 
-  // ── Theses ─────────────────────────────────────────────────────────────────
+  // Theses
   console.log('  Theses')
   if (theses.length === 0) {
     console.log('    (none)')
@@ -122,7 +159,7 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
   }
   console.log()
 
-  // ── Positions ──────────────────────────────────────────────────────────────
+  // Positions
   console.log('  Positions')
   if (!positions || positions.length === 0) {
     console.log('    (no Kalshi positions or Kalshi not configured)')
@@ -133,8 +170,8 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
     for (const p of positions) {
       const ticker = (p.ticker || '').padEnd(22)
       const qty = String(p.quantity || 0).padStart(5)
-      const avg = `${p.average_price_paid || 0}¢`
-      const now = typeof p.current_value === 'number' ? `${p.current_value}¢` : '?¢'
+      const avg = `${p.average_price_paid || 0}\u00A2`
+      const now = typeof p.current_value === 'number' ? `${p.current_value}\u00A2` : '?\u00A2'
       const pnlCents = p.unrealized_pnl || 0
       const pnlDollars = (pnlCents / 100).toFixed(2)
       const pnlStr = pnlCents >= 0 ? `+$${pnlDollars}` : `-$${Math.abs(parseFloat(pnlDollars)).toFixed(2)}`
@@ -145,7 +182,7 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
       console.log(`    ${ticker} ${qty} @ ${avg.padEnd(5)} now ${now.padEnd(5)}  ${pnlStr}`)
     }
 
-    console.log('    ' + '─'.repeat(45))
+    console.log('    ' + '\u2500'.repeat(45))
     const totalCostDollars = (totalCost / 100).toFixed(0)
     const totalPnlDollars = (totalPnl / 100).toFixed(2)
     const pnlDisplay = totalPnl >= 0 ? `+$${totalPnlDollars}` : `-$${Math.abs(parseFloat(totalPnlDollars)).toFixed(2)}`
@@ -153,7 +190,7 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
   }
   console.log()
 
-  // ── Risk Exposure ──────────────────────────────────────────────────────────
+  // Risk Exposure
   if (positions && positions.length > 0) {
     console.log('  Risk Exposure')
 
@@ -169,7 +206,6 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
       riskGroups.set(cat, existing)
     }
 
-    // Sort by cost descending
     const sorted = [...riskGroups.entries()].sort((a, b) => b[1].cost - a[1].cost)
 
     for (const [category, data] of sorted) {
@@ -182,16 +218,16 @@ export async function dashboardCommand(opts?: { json?: boolean; apiKey?: string;
     console.log()
   }
 
-  // ── Top Unpositioned Edges ─────────────────────────────────────────────────
+  // Top Unpositioned Edges
   if (unpositionedEdges.length > 0) {
     console.log('  Top Unpositioned Edges')
     for (const e of unpositionedEdges) {
       const name = (e.market || e.marketId || '').slice(0, 25).padEnd(25)
-      const mkt = `${e.marketPrice}¢`
-      const thesis = `${e.thesisPrice}¢`
+      const mkt = `${e.marketPrice}\u00A2`
+      const thesis = `${e.thesisPrice}\u00A2`
       const edge = e.edge > 0 ? `+${e.edge}` : `${e.edge}`
       const liq = e.orderbook?.liquidityScore || '?'
-      console.log(`    ${name} ${mkt.padStart(5)} → ${thesis.padStart(5)}  edge ${edge.padStart(4)}  ${liq}`)
+      console.log(`    ${name} ${mkt.padStart(5)} \u2192 ${thesis.padStart(5)}  edge ${edge.padStart(4)}  ${liq}`)
     }
     console.log()
   }

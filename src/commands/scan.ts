@@ -5,11 +5,13 @@ import {
   kalshiFetchMarketsBySeries,
   kalshiFetchMarketsByEvent,
 } from '../client.js'
+import { polymarketSearch, parseOutcomePrices, toCents } from '../polymarket.js'
 import { c, vol, cents, pad, rpad, header, hr } from '../utils.js'
 
 interface ScanOpts {
   series?: string
   market?: string
+  venue?: string  // 'kalshi' | 'polymarket' | 'all' (default: 'all')
   json?: boolean
   apiKey?: string
   apiUrl?: string
@@ -28,8 +30,8 @@ export async function scanCommand(query: string, opts: ScanOpts): Promise<void> 
     return
   }
 
-  // Mode 3: keyword scan across all series
-  await keywordScan(query, opts.json)
+  // Mode 3: keyword scan across all series + Polymarket
+  await keywordScan(query, opts.json, opts.venue || 'all')
 }
 
 async function showMarket(ticker: string, json?: boolean): Promise<void> {
@@ -98,11 +100,22 @@ async function showSeries(seriesTicker: string, json?: boolean): Promise<void> {
   }
 }
 
-async function keywordScan(query: string, json?: boolean): Promise<void> {
+async function keywordScan(query: string, json?: boolean, venue = 'all'): Promise<void> {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
-  console.log(`${c.dim}Scanning Kalshi for: "${query}"...${c.reset}`)
 
-  const allSeries = await kalshiFetchAllSeries()
+  // ── Polymarket search (runs in parallel with Kalshi) ───────────────────────
+  const polyPromise = (venue === 'kalshi')
+    ? Promise.resolve([])
+    : polymarketSearch(query, 10).catch(() => [] as any[])
+
+  if (venue !== 'polymarket') {
+    console.log(`${c.dim}Scanning Kalshi for: "${query}"...${c.reset}`)
+  }
+  if (venue !== 'kalshi') {
+    console.log(`${c.dim}Scanning Polymarket for: "${query}"...${c.reset}`)
+  }
+
+  const allSeries = venue === 'polymarket' ? [] : await kalshiFetchAllSeries()
 
   // Score each series
   const thesisKeywords = [
@@ -149,13 +162,14 @@ async function keywordScan(query: string, json?: boolean): Promise<void> {
         for (const m of markets) {
           if (m.status === 'open' || m.status === 'active') {
             allMarkets.push({
+              venue: 'kalshi',
               seriesTicker: s.ticker,
               ticker: m.ticker,
               title: m.title || m.subtitle || '',
               yesAsk: parseFloat(m.yes_ask_dollars || '0'),
               lastPrice: parseFloat(m.last_price_dollars || '0'),
               volume24h: parseFloat(m.volume_24h_fp || '0'),
-              liquidity: parseFloat(m.liquidity_dollars || '0'),
+              liquidity: parseFloat(m.open_interest_fp || m.liquidity_dollars || '0'),
             })
           }
         }
@@ -168,15 +182,46 @@ async function keywordScan(query: string, json?: boolean): Promise<void> {
 
   allMarkets.sort((a, b) => b.liquidity - a.liquidity)
 
+  // ── Polymarket results ──────────────────────────────────────────────────────
+  const polyEvents = await polyPromise
+  const polyMarkets: typeof allMarkets = []
+  for (const event of polyEvents) {
+    for (const m of (event.markets || [])) {
+      if (!m.active || m.closed) continue
+      const prices = parseOutcomePrices(m.outcomePrices)
+      const yesPrice = prices[0] || 0
+      polyMarkets.push({
+        venue: 'polymarket',
+        ticker: m.conditionId?.slice(0, 16) || m.id,
+        title: m.groupItemTitle
+          ? `${event.title}: ${m.groupItemTitle}`
+          : m.question || event.title,
+        yesAsk: yesPrice,
+        lastPrice: m.lastTradePrice || yesPrice,
+        volume24h: m.volume24hr || 0,
+        liquidity: m.liquidityNum || 0,
+      })
+    }
+  }
+
+  // ── Merge & output ─────────────────────────────────────────────────────────
+  // Tag Kalshi markets with venue
+  for (const m of allMarkets) {
+    if (!m.venue) m.venue = 'kalshi'
+  }
+  const combined = [...allMarkets, ...polyMarkets]
+  combined.sort((a, b) => b.liquidity - a.liquidity)
+
   if (json) {
-    console.log(JSON.stringify(allMarkets, null, 2))
+    console.log(JSON.stringify(combined, null, 2))
     return
   }
 
-  header(`${allMarkets.length} Live Markets`)
+  header(`${combined.length} Live Markets (${allMarkets.length} Kalshi + ${polyMarkets.length} Polymarket)`)
   console.log(
     c.bold +
-    pad('Ticker', 35) +
+    pad('', 5) +
+    pad('Ticker', 30) +
     rpad('Yes', 6) +
     rpad('Last', 6) +
     rpad('Vol24h', 10) +
@@ -184,16 +229,25 @@ async function keywordScan(query: string, json?: boolean): Promise<void> {
     '  Title' +
     c.reset
   )
-  hr(110)
+  hr(120)
 
-  for (const m of allMarkets.slice(0, 50)) {
+  for (const m of combined.slice(0, 60)) {
+    // Venue tag: fixed 5-char column, color applied AFTER padding
+    const venuePad = m.venue === 'polymarket' ? 'POLY ' : 'KLSH '
+    const venueColored = m.venue === 'polymarket'
+      ? c.blue + venuePad + c.reset
+      : c.cyan + venuePad + c.reset
+    const tickerStr = m.venue === 'polymarket'
+      ? (m.ticker || '').slice(0, 28)
+      : (m.ticker || '').slice(0, 28)
     console.log(
-      pad(m.ticker, 35) +
+      venueColored +
+      pad(tickerStr, 30) +
       rpad(`${Math.round(m.yesAsk * 100)}¢`, 6) +
       rpad(`${Math.round(m.lastPrice * 100)}¢`, 6) +
-      rpad(vol(m.volume24h), 10) +
-      rpad(vol(m.liquidity), 10) +
-      `  ${m.title.slice(0, 55)}`
+      rpad(vol(Math.round(m.volume24h)), 10) +
+      rpad(vol(Math.round(m.liquidity)), 10) +
+      `  ${(m.title || '').slice(0, 55)}`
     )
   }
   console.log('')

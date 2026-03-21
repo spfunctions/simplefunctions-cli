@@ -51,6 +51,8 @@ import { announcementsCommand } from './commands/announcements.js'
 import { historyCommand } from './commands/history.js'
 import { performanceCommand } from './commands/performance.js'
 import { liquidityCommand } from './commands/liquidity.js'
+import { bookCommand } from './commands/book.js'
+import { telegramCommand } from './commands/telegram.js'
 import { die } from './utils.js'
 
 // ── Apply ~/.sf/config.json to process.env BEFORE any command ────────────────
@@ -59,12 +61,77 @@ applyConfig()
 
 const program = new Command()
 
+const GROUPED_HELP = `
+\x1b[1mSimpleFunctions CLI\x1b[22m — prediction market thesis agent
+
+\x1b[1mUsage:\x1b[22m  sf <command> [options]
+        sf <command> --help for detailed options
+
+\x1b[1mSetup\x1b[22m
+  \x1b[36msetup\x1b[39m                     Interactive config wizard
+  \x1b[36msetup --check\x1b[39m              Show config status
+  \x1b[36msetup --polymarket\x1b[39m         Configure Polymarket wallet
+
+\x1b[1mThesis\x1b[22m
+  \x1b[36mlist\x1b[39m                       List all theses
+  \x1b[36mget\x1b[39m <id>                   Full thesis details
+  \x1b[36mcontext\x1b[39m <id> [--json]      Thesis snapshot \x1b[2m(primary for agents)\x1b[22m
+  \x1b[36mcreate\x1b[39m "thesis"            Create a new thesis
+  \x1b[36msignal\x1b[39m <id> "content"      Inject a signal
+  \x1b[36mevaluate\x1b[39m <id>              Trigger deep evaluation
+  \x1b[36mpublish\x1b[39m / \x1b[36munpublish\x1b[39m <id>  Manage public visibility
+
+\x1b[1mMarkets\x1b[22m
+  \x1b[36mscan\x1b[39m "keywords"            Search Kalshi + Polymarket
+  \x1b[36mscan\x1b[39m --series TICKER       Browse a Kalshi series
+  \x1b[36medges\x1b[39m [--json]             Top edges across all theses
+  \x1b[36mwhatif\x1b[39m <id>                What-if scenario analysis
+  \x1b[36mliquidity\x1b[39m [topic]          Orderbook liquidity scanner
+  \x1b[36mbook\x1b[39m <ticker> [ticker2...]  Orderbook depth for specific markets
+  \x1b[36mexplore\x1b[39m [slug]             Browse public theses
+  \x1b[36mforecast\x1b[39m <event>           Market distribution (P50/P75/P90)
+
+\x1b[1mPortfolio\x1b[22m
+  \x1b[36mpositions\x1b[39m                  Kalshi + Polymarket positions
+  \x1b[36mbalance\x1b[39m                    Account balance
+  \x1b[36morders\x1b[39m                     Resting orders
+  \x1b[36mfills\x1b[39m                      Recent trade fills
+  \x1b[36msettlements\x1b[39m                Settled contracts with P&L
+  \x1b[36mperformance\x1b[39m                P&L over time
+  \x1b[36mdashboard\x1b[39m                  Interactive TUI overview
+
+\x1b[1mTrading\x1b[22m  \x1b[2m(requires sf setup --enable-trading)\x1b[22m
+  \x1b[36mbuy\x1b[39m <ticker> <qty>         Buy contracts
+  \x1b[36msell\x1b[39m <ticker> <qty>        Sell contracts
+  \x1b[36mcancel\x1b[39m [orderId]           Cancel order(s)
+  \x1b[36mrfq\x1b[39m <ticker> <qty>        Request for quote
+
+\x1b[1mInteractive\x1b[22m
+  \x1b[36magent\x1b[39m [id]                 Agent with natural language + tools
+  \x1b[36mtelegram\x1b[39m                   Telegram bot for monitoring
+
+\x1b[1mInfo\x1b[22m
+  \x1b[36mfeed\x1b[39m                       Evaluation history stream
+  \x1b[36mmilestones\x1b[39m                 Upcoming Kalshi events
+  \x1b[36mschedule\x1b[39m                   Exchange status
+  \x1b[36mannouncements\x1b[39m              Exchange announcements
+  \x1b[36mhistory\x1b[39m <ticker>           Historical market data
+`
+
 program
   .name('sf')
   .description('SimpleFunctions CLI — prediction market thesis agent')
   .version('0.1.0')
   .option('--api-key <key>', 'API key (or set SF_API_KEY env var)')
   .option('--api-url <url>', 'API base URL (or set SF_API_URL env var)')
+  .configureHelp({
+    formatHelp: (cmd, helper) => {
+      // For subcommands, use default help
+      if (cmd.parent) return helper.formatHelp(cmd, helper)
+      // For main program, show grouped help
+      return GROUPED_HELP
+    },
+  })
 
 // ── Pre-action guard: check configuration ────────────────────────────────────
 const NO_CONFIG_COMMANDS = new Set(['setup', 'help', 'scan', 'explore', 'milestones', 'forecast', 'settlements', 'balance', 'orders', 'fills', 'schedule', 'announcements', 'history', 'liquidity'])
@@ -95,8 +162,9 @@ program
   .option('--enable-trading', 'Enable trading (sf buy/sell/cancel)')
   .option('--disable-trading', 'Disable trading')
   .option('--kalshi', 'Reconfigure Kalshi API credentials')
+  .option('--polymarket', 'Reconfigure Polymarket wallet address')
   .action(async (opts) => {
-    await run(() => setupCommand({ check: opts.check, reset: opts.reset, key: opts.key, enableTrading: opts.enableTrading, disableTrading: opts.disableTrading, kalshi: opts.kalshi }))
+    await run(() => setupCommand({ check: opts.check, reset: opts.reset, key: opts.key, enableTrading: opts.enableTrading, disableTrading: opts.disableTrading, kalshi: opts.kalshi, polymarket: opts.polymarket }))
   })
 
 // ── sf list ──────────────────────────────────────────────────────────────────
@@ -160,9 +228,10 @@ program
 // ── sf scan [query] ───────────────────────────────────────────────────────────
 program
   .command('scan [query]')
-  .description('Explore Kalshi markets (no auth required)')
+  .description('Explore Kalshi + Polymarket markets')
   .option('--series <ticker>', 'List events + markets for a series (e.g. KXWTIMAX)')
   .option('--market <ticker>', 'Get single market detail (e.g. KXWTIMAX-26DEC31-T140)')
+  .option('--venue <venue>', 'Filter by venue: kalshi, polymarket, or all (default: all)')
   .option('--json', 'Output raw JSON')
   .action(async (query, opts, cmd) => {
     const g = cmd.optsWithGlobals()
@@ -174,6 +243,7 @@ program
     await run(() => scanCommand(q, {
       series: opts.series,
       market: opts.market,
+      venue: opts.venue,
       json: opts.json,
       apiKey: g.apiKey,
       apiUrl: g.apiUrl,
@@ -257,11 +327,12 @@ program
 // ── sf dashboard ──────────────────────────────────────────────────────────────
 program
   .command('dashboard')
-  .description('Portfolio overview — theses, positions, risk, unpositioned edges')
+  .description('Portfolio overview — interactive TUI (default), or one-shot with --once/--json')
   .option('--json', 'JSON output')
+  .option('--once', 'One-time print (no interactive mode)')
   .action(async (opts, cmd) => {
     const g = cmd.optsWithGlobals()
-    await run(() => dashboardCommand({ json: opts.json, apiKey: g.apiKey, apiUrl: g.apiUrl }))
+    await run(() => dashboardCommand({ json: opts.json, once: opts.once, apiKey: g.apiKey, apiUrl: g.apiUrl }))
   })
 
 // ── sf milestones ────────────────────────────────────────────────────────────
@@ -436,14 +507,43 @@ program
 
 // ── sf liquidity ─────────────────────────────────────────────────────────────
 program
-  .command('liquidity')
-  .description('Market liquidity scanner by topic and horizon')
-  .option('--topic <topic>', 'Filter topic (oil, recession, fed, cpi, gas, sp500)')
+  .command('liquidity [topic]')
+  .description('Market liquidity scanner — run without args to see topics')
+  .option('--all', 'Scan all topics')
+  .option('--venue <venue>', 'Filter venue: kalshi, polymarket, all (default: all)')
   .option('--horizon <horizon>', 'Filter horizon (weekly, monthly, long-term)')
   .option('--min-depth <depth>', 'Minimum bid+ask depth', parseInt)
   .option('--json', 'JSON output')
+  .action(async (topic, opts) => {
+    await run(() => liquidityCommand({ ...opts, topic }))
+  })
+
+// ── sf book ──────────────────────────────────────────────────────────────────
+program
+  .command('book [tickers...]')
+  .description('Orderbook depth, spread, and liquidity for specific markets')
+  .option('--poly <query>', 'Search Polymarket markets by keyword')
+  .option('--history', 'Include 7-day price history sparkline')
+  .option('--json', 'JSON output')
+  .action(async (tickers, opts) => {
+    if (tickers.length === 0 && !opts.poly) {
+      console.error('Usage: sf book <ticker> [ticker2...]  OR  sf book --poly "oil price"')
+      process.exit(1)
+    }
+    await run(() => bookCommand(tickers, opts))
+  })
+
+// ── sf telegram ──────────────────────────────────────────────────────────────
+program
+  .command('telegram')
+  .description('Start Telegram bot for monitoring and trading')
+  .option('--token <token>', 'Telegram bot token (or set TELEGRAM_BOT_TOKEN)')
+  .option('--chat-id <id>', 'Restrict to specific chat ID')
+  .option('--daemon', 'Run in background')
+  .option('--stop', 'Stop background bot')
+  .option('--status', 'Check if bot is running')
   .action(async (opts) => {
-    await run(() => liquidityCommand(opts))
+    await run(() => telegramCommand(opts))
   })
 
 // ── sf strategies ─────────────────────────────────────────────────────────────

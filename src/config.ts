@@ -18,9 +18,12 @@ export interface SFConfig {
   openrouterKey?: string
   kalshiKeyId?: string
   kalshiPrivateKeyPath?: string
+  polymarketWalletAddress?: string
+  polymarketPrivateKeyPath?: string
   tavilyKey?: string
   model?: string
   tradingEnabled?: boolean
+  telegramBotToken?: string
   configuredAt?: string
 }
 
@@ -52,9 +55,12 @@ export function loadConfig(): SFConfig {
     openrouterKey: process.env.OPENROUTER_API_KEY || file.openrouterKey,
     kalshiKeyId: process.env.KALSHI_API_KEY_ID || file.kalshiKeyId,
     kalshiPrivateKeyPath: process.env.KALSHI_PRIVATE_KEY_PATH || file.kalshiPrivateKeyPath,
+    polymarketWalletAddress: process.env.POLYMARKET_WALLET_ADDRESS || file.polymarketWalletAddress,
+    polymarketPrivateKeyPath: process.env.POLYMARKET_PRIVATE_KEY_PATH || file.polymarketPrivateKeyPath,
     tavilyKey: process.env.TAVILY_API_KEY || file.tavilyKey,
     model: process.env.SF_MODEL || file.model || DEFAULT_MODEL,
     tradingEnabled: file.tradingEnabled || false,
+    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || file.telegramBotToken,
   }
 }
 
@@ -107,6 +113,12 @@ export function applyConfig(): void {
   }
   if (!process.env.KALSHI_PRIVATE_KEY_PATH && file.kalshiPrivateKeyPath) {
     process.env.KALSHI_PRIVATE_KEY_PATH = file.kalshiPrivateKeyPath
+  }
+  if (!process.env.POLYMARKET_WALLET_ADDRESS && file.polymarketWalletAddress) {
+    process.env.POLYMARKET_WALLET_ADDRESS = file.polymarketWalletAddress
+  }
+  if (!process.env.POLYMARKET_PRIVATE_KEY_PATH && file.polymarketPrivateKeyPath) {
+    process.env.POLYMARKET_PRIVATE_KEY_PATH = file.polymarketPrivateKeyPath
   }
   if (!process.env.TAVILY_API_KEY && file.tavilyKey) {
     process.env.TAVILY_API_KEY = file.tavilyKey

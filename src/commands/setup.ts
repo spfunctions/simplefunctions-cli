@@ -126,6 +126,7 @@ interface SetupOpts {
   enableTrading?: boolean
   disableTrading?: boolean
   kalshi?: boolean
+  polymarket?: boolean
 }
 
 export async function setupCommand(opts: SetupOpts): Promise<void> {
@@ -178,6 +179,18 @@ export async function setupCommand(opts: SetupOpts): Promise<void> {
     return
   }
 
+  // ── sf setup --polymarket (reconfigure Polymarket credentials) ──────────
+  if (opts.polymarket) {
+    const existing = loadFileConfig()
+    blank()
+    console.log(`  ${bold('Reconfigure Polymarket Credentials')}`)
+    blank()
+    await promptForPolymarket(existing)
+    saveConfig(existing)
+    blank()
+    return
+  }
+
   // ── sf setup --enable-trading / --disable-trading ────────────────────────
   if (opts.enableTrading) {
     const existing = loadFileConfig()
@@ -226,6 +239,13 @@ async function showCheck(): Promise<void> {
     ok(`KALSHI            ${dim(mask(config.kalshiKeyId))}`)
   } else {
     info(`${dim('○')} KALSHI            ${dim('skipped')}`)
+  }
+
+  // Polymarket
+  if (config.polymarketWalletAddress) {
+    ok(`POLYMARKET        ${dim(mask(config.polymarketWalletAddress))}`)
+  } else {
+    info(`${dim('○')} POLYMARKET        ${dim('skipped')}`)
   }
 
   // Tavily
@@ -341,9 +361,28 @@ async function runWizard(): Promise<void> {
   saveConfig(config)
 
   // ════════════════════════════════════════════════════════════════════════════
-  // Step 4: Tavily
+  // Step 4: Polymarket
   // ════════════════════════════════════════════════════════════════════════════
-  console.log(`  ${bold('Step 4: News Search (optional)')}`)
+  console.log(`  ${bold('Step 4: Polymarket (optional)')}`)
+  blank()
+
+  const existingPolyWallet = process.env.POLYMARKET_WALLET_ADDRESS || config.polymarketWalletAddress
+  if (existingPolyWallet) {
+    ok(`Detected wallet — ${dim(mask(existingPolyWallet))}`)
+    info(dim('Skipping.'))
+    config.polymarketWalletAddress = existingPolyWallet
+    blank()
+  } else {
+    await promptForPolymarket(config)
+  }
+
+  saveConfig(config)
+  if (config.polymarketWalletAddress) process.env.POLYMARKET_WALLET_ADDRESS = config.polymarketWalletAddress
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Step 5: Tavily
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log(`  ${bold('Step 5: News Search (optional)')}`)
   blank()
 
   const existingTavily = process.env.TAVILY_API_KEY || config.tavilyKey
@@ -369,7 +408,7 @@ async function runWizard(): Promise<void> {
   // Step 5: Trading
   // ════════════════════════════════════════════════════════════════════════════
   if (config.kalshiKeyId) {
-    console.log(`  ${bold('Step 5: Trading (optional)')}`)
+    console.log(`  ${bold('Step 6: Trading (optional)')}`)
     blank()
     info('Warning: enabling this unlocks sf buy / sf sell / sf cancel.')
     info('Your Kalshi API key must have read+write permissions.')
@@ -528,7 +567,40 @@ async function promptForTavily(): Promise<string | undefined> {
   return answer
 }
 
-// ─── Step 6: Thesis ──────────────────────────────────────────────────────────
+async function promptForPolymarket(config: SFConfig): Promise<void> {
+  info('Connect Polymarket to view positions and scan orderbooks.')
+  info('Your Polygon wallet address is needed (starts with 0x...).')
+  info(`Find it at ${cyan('https://polymarket.com')} → Settings → Profile.`)
+  info('Press Enter to skip:')
+  blank()
+
+  const walletAddress = await prompt('  Wallet address > ')
+  if (!walletAddress) {
+    info(dim('Skipped.'))
+    blank()
+    return
+  }
+
+  if (!walletAddress.startsWith('0x') || walletAddress.length < 40) {
+    fail('Invalid wallet address (must start with 0x and be 42 characters)')
+    info(dim('Saved anyway. You can fix it later with sf setup.'))
+  } else {
+    ok(`Wallet: ${mask(walletAddress)}`)
+  }
+
+  config.polymarketWalletAddress = walletAddress
+
+  // Optionally configure private key for future trading
+  info(dim('Private key (for future trading) — press Enter to skip:'))
+  const keyPath = await prompt('  Key path > ')
+  if (keyPath) {
+    config.polymarketPrivateKeyPath = keyPath
+    ok(`Private key path: ${dim(keyPath)}`)
+  }
+  blank()
+}
+
+// ─── Step 7: Thesis ──────────────────────────────────────────────────────────
 
 async function handleThesisStep(config: SFConfig): Promise<void> {
   try {
@@ -538,7 +610,7 @@ async function handleThesisStep(config: SFConfig): Promise<void> {
     const activeTheses = theses.filter((t: any) => t.status === 'active')
 
     if (activeTheses.length > 0) {
-      console.log(`  ${bold('Step 6: Theses')}`)
+      console.log(`  ${bold('Step 7: Theses')}`)
       blank()
       ok(`Found ${activeTheses.length} active thesis(es):`)
       for (const t of activeTheses.slice(0, 5)) {
@@ -581,7 +653,7 @@ async function handleThesisStep(config: SFConfig): Promise<void> {
     }
 
     // No theses — offer to create one
-    console.log(`  ${bold('Step 6: Create Your First Thesis')}`)
+    console.log(`  ${bold('Step 7: Create Your First Thesis')}`)
     blank()
     info('A thesis is your core market conviction. The system builds a causal model')
     info('from it, then continuously scans prediction markets for mispriced contracts.')

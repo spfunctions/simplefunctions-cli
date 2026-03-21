@@ -7,6 +7,7 @@
 
 import { kalshiFetchMarketsBySeries } from '../client.js'
 import { getPublicOrderbook, getPositions, isKalshiConfigured } from '../kalshi.js'
+import { polymarketSearch, polymarketGetOrderbookWithDepth, parseClobTokenIds, parseOutcomePrices } from '../polymarket.js'
 import { TOPIC_SERIES } from '../topics.js'
 import { c, pad, rpad } from '../utils.js'
 
@@ -15,6 +16,7 @@ import { c, pad, rpad } from '../utils.js'
 interface MarketLiquidity {
   ticker: string
   shortTicker: string
+  topic: string     // uppercased topic name for grouping
   horizon: 'weekly' | 'monthly' | 'long-term'
   closeTime: string
   bestBid: number   // cents
@@ -24,6 +26,7 @@ interface MarketLiquidity {
   askDepth: number  // total contracts on no bids (= yes ask side)
   slippage100: string // weighted avg price to buy 100 YES contracts, or "∞"
   held: boolean
+  venue: string     // 'kalshi' | 'polymarket'
 }
 
 type Horizon = 'weekly' | 'monthly' | 'long-term'
@@ -111,14 +114,34 @@ export async function liquidityCommand(opts: {
   horizon?: string
   minDepth?: number
   json?: boolean
+  all?: boolean
+  venue?: string
 }): Promise<void> {
-  // Determine which topics to scan
   const allTopics = Object.keys(TOPIC_SERIES)
+
+  // If no topic and no --all, show available topics
+  if (!opts.topic && !opts.all) {
+    console.log()
+    console.log(`${c.bold}Available Topics${c.reset} ${c.dim}(${allTopics.length} topics)${c.reset}`)
+    console.log(c.dim + '─'.repeat(50) + c.reset)
+    console.log()
+    for (const topic of allTopics) {
+      const series = TOPIC_SERIES[topic]
+      console.log(`  ${c.cyan}${pad(topic, 14)}${c.reset} ${c.dim}${series.slice(0, 3).join(', ')}${series.length > 3 ? ` +${series.length - 3} more` : ''}${c.reset}`)
+    }
+    console.log()
+    console.log(`${c.dim}Usage: sf liquidity <topic>    (e.g. sf liquidity oil)${c.reset}`)
+    console.log(`${c.dim}       sf liquidity --all      (scan all topics)${c.reset}`)
+    console.log()
+    return
+  }
+
+  // Determine which topics to scan
   const topics = opts.topic
     ? allTopics.filter(t => t.toLowerCase() === opts.topic!.toLowerCase())
     : allTopics
 
-  if (topics.length === 0) {
+  if (opts.topic && topics.length === 0) {
     const valid = allTopics.join(', ')
     console.error(`Unknown topic: ${opts.topic}. Valid topics: ${valid}`)
     process.exit(1)
@@ -155,6 +178,35 @@ export async function liquidityCommand(opts: {
     }
   }
 
+  // ── Polymarket: search for matching markets ──
+  const scanPoly = opts.venue !== 'kalshi'
+  if (scanPoly) {
+    for (const topic of topics) {
+      try {
+        const events = await polymarketSearch(topic, 5)
+        for (const event of events) {
+          for (const m of (event.markets || [])) {
+            if (!m.active || m.closed || !m.enableOrderBook) continue
+            if (!topicMarkets[topic]) topicMarkets[topic] = []
+            topicMarkets[topic].push({
+              ticker: m.conditionId?.slice(0, 16) || m.id,
+              close_time: m.endDateIso || '',
+              venue: 'polymarket',
+              question: m.question || event.title,
+              clobTokenIds: m.clobTokenIds,
+              bestBid: m.bestBid,
+              bestAsk: m.bestAsk,
+              spread: m.spread,
+              liquidityNum: m.liquidityNum,
+            })
+          }
+        }
+      } catch {
+        // skip Polymarket errors
+      }
+    }
+  }
+
   // Filter by horizon if specified, classify all markets
   const horizonFilter = opts.horizon as Horizon | undefined
 
@@ -164,6 +216,9 @@ export async function liquidityCommand(opts: {
     closeTime: string
     topic: string
     horizon: Horizon
+    venue: string
+    question?: string
+    clobTokenIds?: string
   }
 
   const marketInfos: MarketInfo[] = []
@@ -173,7 +228,15 @@ export async function liquidityCommand(opts: {
       if (!closeTime) continue
       const horizon = classifyHorizon(closeTime)
       if (horizonFilter && horizon !== horizonFilter) continue
-      marketInfos.push({ ticker: m.ticker, closeTime, topic, horizon })
+      marketInfos.push({
+        ticker: m.ticker,
+        closeTime,
+        topic,
+        horizon,
+        venue: m.venue || 'kalshi',
+        question: m.question,
+        clobTokenIds: m.clobTokenIds,
+      })
     }
   }
 
@@ -182,9 +245,13 @@ export async function liquidityCommand(opts: {
     return
   }
 
-  // Fetch orderbooks in batches of 5, 100ms between batches
-  const orderbooks = await batchProcess(
-    marketInfos,
+  // Split by venue
+  const kalshiInfos = marketInfos.filter(m => m.venue === 'kalshi')
+  const polyInfos = marketInfos.filter(m => m.venue === 'polymarket')
+
+  // Fetch Kalshi orderbooks in batches
+  const kalshiResults = await batchProcess(
+    kalshiInfos,
     async (info) => {
       const ob = await getPublicOrderbook(info.ticker)
       return { info, ob }
@@ -193,50 +260,83 @@ export async function liquidityCommand(opts: {
     100,
   )
 
+  // Fetch Polymarket orderbooks in batches
+  const polyResults = await batchProcess(
+    polyInfos,
+    async (info) => {
+      if (!info.clobTokenIds) return { info, depth: null }
+      const ids = parseClobTokenIds(info.clobTokenIds)
+      if (!ids) return { info, depth: null }
+      const depth = await polymarketGetOrderbookWithDepth(ids[0])
+      return { info, depth }
+    },
+    5,
+    100,
+  )
+
   // Build liquidity rows
   const rows: MarketLiquidity[] = []
-  for (const result of orderbooks) {
+
+  // Process Kalshi results
+  for (const result of kalshiResults) {
     if (!result || !result.ob) continue
     const { info, ob } = result
 
-    const yesDollars = ob.yes_dollars.map(([p, q]) => ({
+    const yesDollars = ob.yes_dollars.map(([p, q]: [string, string]) => ({
       price: Math.round(parseFloat(p) * 100),
       qty: parseFloat(q),
-    })).filter(l => l.price > 0)
+    })).filter((l: any) => l.price > 0)
 
-    const noDollars = ob.no_dollars.map(([p, q]) => ({
+    const noDollars = ob.no_dollars.map(([p, q]: [string, string]) => ({
       price: Math.round(parseFloat(p) * 100),
       qty: parseFloat(q),
-    })).filter(l => l.price > 0)
+    })).filter((l: any) => l.price > 0)
 
-    // Sort descending
-    yesDollars.sort((a, b) => b.price - a.price)
-    noDollars.sort((a, b) => b.price - a.price)
+    yesDollars.sort((a: any, b: any) => b.price - a.price)
+    noDollars.sort((a: any, b: any) => b.price - a.price)
 
     const bestBid = yesDollars.length > 0 ? yesDollars[0].price : 0
     const bestAsk = noDollars.length > 0 ? (100 - noDollars[0].price) : 100
     const spread = bestAsk - bestBid
-
-    const bidDepth = yesDollars.reduce((sum, l) => sum + l.qty, 0)
-    const askDepth = noDollars.reduce((sum, l) => sum + l.qty, 0)
-
+    const bidDepth = yesDollars.reduce((sum: number, l: any) => sum + l.qty, 0)
+    const askDepth = noDollars.reduce((sum: number, l: any) => sum + l.qty, 0)
     const slippage100 = calcSlippage100(ob.no_dollars, 100)
 
-    // Filter by minDepth
     if (opts.minDepth && (bidDepth + askDepth) < opts.minDepth) continue
 
     rows.push({
       ticker: info.ticker,
-      shortTicker: info.ticker, // will abbreviate per-group below
+      shortTicker: info.ticker,
+      topic: info.topic.toUpperCase(),
       horizon: info.horizon,
       closeTime: info.closeTime,
-      bestBid,
-      bestAsk,
-      spread,
-      bidDepth,
-      askDepth,
-      slippage100,
+      bestBid, bestAsk, spread, bidDepth, askDepth, slippage100,
       held: heldTickers.has(info.ticker),
+      venue: 'kalshi',
+    })
+  }
+
+  // Process Polymarket results
+  for (const result of polyResults) {
+    if (!result || !result.depth) continue
+    const { info, depth } = result
+
+    if (opts.minDepth && (depth.bidDepthTop3 + depth.askDepthTop3) < opts.minDepth) continue
+
+    rows.push({
+      ticker: (info.question || info.ticker).slice(0, 30),
+      shortTicker: (info.question || info.ticker).slice(0, 30),
+      topic: info.topic.toUpperCase(),
+      horizon: info.horizon,
+      closeTime: info.closeTime,
+      bestBid: depth.bestBid,
+      bestAsk: depth.bestAsk,
+      spread: depth.spread,
+      bidDepth: depth.totalBidDepth,
+      askDepth: depth.totalAskDepth,
+      slippage100: '-',
+      held: false,
+      venue: 'polymarket',
     })
   }
 
@@ -252,20 +352,10 @@ export async function liquidityCommand(opts: {
   console.log(`${c.bold}Liquidity Scanner${c.reset} ${c.dim}(${now} UTC)${c.reset}`)
   console.log(c.dim + '─'.repeat(68) + c.reset)
 
-  // Group rows by topic → horizon
+  // Group rows by topic → horizon (topic is pre-set on each row)
   const grouped: Record<string, Record<string, MarketLiquidity[]>> = {}
   for (const row of rows) {
-    // find which topic this ticker belongs to
-    let topic = 'OTHER'
-    for (const [t, series] of Object.entries(TOPIC_SERIES)) {
-      for (const s of series) {
-        if (row.ticker.toUpperCase().startsWith(s)) {
-          topic = t.toUpperCase()
-          break
-        }
-      }
-      if (topic !== 'OTHER') break
-    }
+    const topic = row.topic || 'OTHER'
     if (!grouped[topic]) grouped[topic] = {}
     if (!grouped[topic][row.horizon]) grouped[topic][row.horizon] = []
     grouped[topic][row.horizon].push(row)
@@ -282,24 +372,30 @@ export async function liquidityCommand(opts: {
       const marketRows = horizons[h]
       if (!marketRows || marketRows.length === 0) continue
 
-      // Find common prefix for abbreviation within this group
-      const commonPrefix = findCommonPrefix(marketRows.map(r => r.ticker))
-
-      // Abbreviate tickers
-      for (const row of marketRows) {
-        row.shortTicker = commonPrefix.length > 0
-          ? row.ticker.slice(commonPrefix.length).replace(/^-/, '')
-          : row.ticker
-        if (row.shortTicker.length === 0) row.shortTicker = row.ticker
+      // Abbreviate Kalshi tickers (strip common prefix), keep Polymarket titles as-is
+      const kalshiRows = marketRows.filter(r => r.venue === 'kalshi')
+      if (kalshiRows.length > 1) {
+        const commonPrefix = findCommonPrefix(kalshiRows.map(r => r.ticker))
+        for (const row of kalshiRows) {
+          const short = commonPrefix.length > 0
+            ? row.ticker.slice(commonPrefix.length).replace(/^-/, '')
+            : row.ticker
+          row.shortTicker = short.length > 0 ? short : row.ticker
+        }
       }
 
-      // Sort by ticker
-      marketRows.sort((a, b) => a.ticker.localeCompare(b.ticker))
+      // Sort: Kalshi by ticker, Polymarket by spread
+      marketRows.sort((a, b) => {
+        if (a.venue !== b.venue) return a.venue === 'kalshi' ? -1 : 1
+        return a.venue === 'kalshi'
+          ? a.ticker.localeCompare(b.ticker)
+          : a.spread - b.spread
+      })
 
       console.log()
       console.log(`${c.bold}${c.cyan}${topic}${c.reset} ${c.dim}— ${horizonLabel(h)}${c.reset}`)
       console.log(
-        `${c.dim}${pad('Ticker', 20)} ${rpad('Bid¢', 5)} ${rpad('Ask¢', 5)} ${rpad('Spread', 6)} ${rpad('BidDep', 6)} ${rpad('AskDep', 6)} ${rpad('Slip100', 7)}${c.reset}`
+        `${c.dim}     ${pad('Market', 22)} ${rpad('Bid¢', 5)} ${rpad('Ask¢', 5)} ${rpad('Spread', 6)} ${rpad('BidDep', 6)} ${rpad('AskDep', 6)} ${rpad('Slip100', 7)}${c.reset}`
       )
 
       for (const row of marketRows) {
@@ -330,8 +426,9 @@ export async function liquidityCommand(opts: {
             ? `${c.yellow}${spreadPadded}${c.reset}`
             : `${c.red}${spreadPadded}${c.reset}`
 
+        const venueTag = row.venue === 'polymarket' ? `${c.blue}POLY${c.reset} ` : `${c.cyan}KLSH${c.reset} `
         console.log(
-          `${pad(row.shortTicker, 20)} ${rpad(String(row.bestBid), 5)} ${rpad(String(row.bestAsk), 5)} ${spreadColored} ${rpad(String(Math.round(row.bidDepth)), 6)} ${rpad(String(Math.round(row.askDepth)), 6)} ${rpad(row.slippage100, 7)}${thinMark}${heldMark}`
+          `${venueTag}${pad(row.shortTicker, 22)} ${rpad(String(row.bestBid), 5)} ${rpad(String(row.bestAsk), 5)} ${spreadColored} ${rpad(String(Math.round(row.bidDepth)), 6)} ${rpad(String(Math.round(row.askDepth)), 6)} ${rpad(row.slippage100, 7)}${thinMark}${heldMark}`
         )
       }
     }
