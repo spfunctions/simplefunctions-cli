@@ -2,6 +2,8 @@
 
 Prediction market intelligence CLI. Build causal thesis models, scan Kalshi/Polymarket for mispricings, detect edges, and trade — all from the terminal.
 
+![demo](demo.gif)
+
 ## Quick Start
 
 ```bash
