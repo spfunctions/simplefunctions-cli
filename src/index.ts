@@ -213,9 +213,10 @@ program
   .command('signal <id> <content>')
   .description('Inject a signal into the thesis queue')
   .option('--type <type>', 'Signal type: news | user_note | external', 'user_note')
+  .option('--json', 'JSON output')
   .action(async (id, content, opts, cmd) => {
     const g = cmd.optsWithGlobals()
-    await run(() => signalCommand(id, content, { type: opts.type, apiKey: g.apiKey, apiUrl: g.apiUrl }))
+    await run(() => signalCommand(id, content, { type: opts.type, json: opts.json, apiKey: g.apiKey, apiUrl: g.apiUrl }))
   })
 
 // ── sf evaluate <id> ──────────────────────────────────────────────────────────

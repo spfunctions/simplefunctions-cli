@@ -4,12 +4,17 @@ import { c } from '../utils.js'
 export async function signalCommand(
   id: string,
   content: string,
-  opts: { type?: string; apiKey?: string; apiUrl?: string }
+  opts: { type?: string; json?: boolean; apiKey?: string; apiUrl?: string }
 ): Promise<void> {
   const client = new SFClient(opts.apiKey, opts.apiUrl)
   const type = opts.type || 'user_note'
 
   const result = await client.injectSignal(id, type, content, 'cli')
+
+  if (opts.json) {
+    console.log(JSON.stringify({ signalId: result.signalId || null, type, source: 'cli', content }, null, 2))
+    return
+  }
 
   console.log(`${c.green}✓${c.reset} Signal injected`)
   console.log(`  ${c.bold}Type:${c.reset}    ${type}`)
@@ -18,7 +23,6 @@ export async function signalCommand(
   if (result.signalId) {
     console.log(`  ${c.bold}ID:${c.reset}      ${result.signalId}`)
   }
-  // Calculate minutes until next 15-min cron cycle (runs at :00, :15, :30, :45)
   const now = new Date()
   const minute = now.getMinutes()
   const nextCycleMin = Math.ceil((minute + 1) / 15) * 15
