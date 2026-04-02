@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use SimpleFunctions in your research, please cite it as below."
+type: software
+title: "SimpleFunctions"
+abstract: "Context flow infrastructure for prediction markets. Thesis management, causal tree decomposition, edge detection, and automated trading across Kalshi and Polymarket."
+authors:
+  - family-names: Liu
+    given-names: Patrick
+url: "https://simplefunctions.dev"
+repository-code: "https://github.com/spfunctions/simplefunctions-cli"
+license: MIT
+version: "1.5.0"
+date-released: "2026-01-01"
+keywords:
+  - prediction-markets
+  - kalshi
+  - polymarket
+  - ai-agents
+  - mcp
+  - causal-inference
+  - edge-detection
