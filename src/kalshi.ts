@@ -188,18 +188,19 @@ export async function getPositions(): Promise<KalshiPosition[] | null> {
     const raw = data.market_positions || (data as any).positions || []
 
     return raw.map((p: any) => {
-      // Kalshi actual fields:
-      //   position_fp: "795.00" (string, contract count — positive=YES, negative=NO)
-      //   total_traded_dollars: "453.1500" (string, total cost in dollars)
-      //   ticker: "KXWTIMAX-26DEC31-T135"
-      //   event_ticker: "KXWTIMAX-26DEC31"
-      //   market_result: "", resting_orders_count: 0, etc.
+      // Kalshi API fields (all string-encoded):
+      //   position_fp: "795.00" — net contract count (positive=YES, negative=NO)
+      //   market_exposure_dollars: "61.23" — net cost of aggregate position
+      //   total_traded_dollars: "453.15" — gross volume (all sides combined)
+      //   realized_pnl_dollars: "-0.08" — locked-in P&L
+      //   fees_paid_dollars: "1.92" — fees on fills
+      // IMPORTANT: Use market_exposure_dollars (net cost), NOT total_traded_dollars (gross).
+      // When holding both YES and NO (maker), gross >> net → nonsensical avg price.
       const positionFp = parseFloat(p.position_fp || '0')
-      const totalTradedDollars = parseFloat(p.total_traded_dollars || '0')
+      const exposureDollars = parseFloat(p.market_exposure_dollars || p.total_traded_dollars || '0')
       const quantity = Math.abs(positionFp)
       const side: 'yes' | 'no' = positionFp >= 0 ? 'yes' : 'no'
-      // avg price in cents = (total_traded_dollars / quantity) * 100
-      const avgPriceCents = quantity > 0 ? Math.round((totalTradedDollars / quantity) * 100) : 0
+      const avgPriceCents = quantity > 0 ? Math.round((Math.abs(exposureDollars) / quantity) * 100) : 0
 
       return {
         ticker: p.ticker || p.market_ticker || '',
@@ -209,9 +210,9 @@ export async function getPositions(): Promise<KalshiPosition[] | null> {
         quantity,
         average_price_paid: avgPriceCents,
         current_value: 0, // will be enriched by live price lookup if needed
-        realized_pnl: Math.round(parseFloat(p.realized_pnl || '0') * 100),
+        realized_pnl: Math.round(parseFloat(p.realized_pnl_dollars || p.realized_pnl || '0') * 100),
         unrealized_pnl: 0, // Kalshi doesn't give this directly, needs live price
-        total_cost: Math.round(totalTradedDollars * 100), // dollars → cents
+        total_cost: Math.round(Math.abs(exposureDollars) * 100), // net cost in cents
       }
     })
   } catch (err) {
