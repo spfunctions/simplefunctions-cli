@@ -58,7 +58,7 @@ server.tool(
   'Calibrated world model: 9,706 prediction markets distilled into 800 tokens. Real-money probabilities on geopolitics, economics, tech, policy.',
   {
     focus: z.string().optional().describe('Comma-separated topics: energy,geo,tech,policy,crypto,finance'),
-    format: z.enum(['markdown', 'json']).default('markdown').optional(),
+    format: z.enum(['markdown', 'json']).optional(),
   },
   async ({ focus, format }) => {
     const params = new URLSearchParams();
@@ -75,7 +75,7 @@ server.tool(
   'What changed since a timestamp. ~30-50 tokens vs 800 for full state.',
   {
     since: z.string().describe('Relative (30m, 1h, 6h, 24h) or ISO timestamp'),
-    format: z.enum(['markdown', 'json']).default('markdown').optional(),
+    format: z.enum(['markdown', 'json']).optional(),
   },
   async ({ since, format }) => {
     let url = `${BASE}/api/agent/world/delta?since=${encodeURIComponent(since)}`;
@@ -90,7 +90,7 @@ server.tool(
   'Live prediction market contracts with prices, volume, and metadata. Filter by topic for deep dives.',
   {
     topic: z.string().optional().describe('Filter: energy, rates, fx, equities, crypto, volatility'),
-    limit: z.number().default(20).optional(),
+    limit: z.number().optional(),
   },
   async ({ topic, limit }) => {
     const params = new URLSearchParams();
@@ -180,7 +180,7 @@ server.tool(
     thesisId: z.string(),
     apiKey: z.string(),
     content: z.string().describe('Signal content'),
-    type: z.enum(['news', 'user_note', 'external']).default('user_note'),
+    type: z.enum(['news', 'user_note', 'external']).optional(),
   },
   async ({ thesisId, apiKey: key, content, type }) => {
     const data = await fetch(`${BASE}/api/thesis/${thesisId}/signal`, {
@@ -215,7 +215,7 @@ server.tool(
   {
     apiKey: z.string(),
     title: z.string().describe('Thesis statement'),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
   },
   async ({ apiKey: key, title, metadata }) => {
     const data = await fetch(`${BASE}/api/thesis/create`, {
@@ -254,13 +254,13 @@ server.tool(
       url: z.string().optional(),
       urls: z.array(z.string()).optional(),
       query: z.string().optional(),
-      options: z.record(z.unknown()).optional(),
+      options: z.record(z.string(), z.any()).optional(),
     }),
     analysis: z.object({
       enabled: z.boolean(),
       prompt: z.string(),
       model: z.string().optional(),
-      schema: z.record(z.unknown()).optional(),
+      schema: z.record(z.string(), z.any()).optional(),
     }).optional(),
     enrich: z.object({
       enabled: z.boolean(),
@@ -282,11 +282,11 @@ server.tool(
   'Query real-time and historical market data from Databento (CME futures, equities, crypto).',
   {
     symbols: z.array(z.string()).describe('Symbols like CL.c.0, ES.c.0, AAPL'),
-    dataset: z.string().default('GLBX.MDP3').optional(),
-    schema: z.string().default('trades').optional(),
+    dataset: z.string().optional().describe('Databento dataset (default: GLBX.MDP3)'),
+    schema: z.string().optional().describe('Data schema (default: trades)'),
     start: z.string().optional().describe('ISO date'),
     end: z.string().optional().describe('ISO date'),
-    limit: z.number().default(100).optional(),
+    limit: z.number().optional().describe('Max results (default: 100)'),
   },
   async ({ symbols, dataset, schema, start, end, limit }) => {
     const params = new URLSearchParams();
