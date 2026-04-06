@@ -1,1 +1,22 @@
-{"$schema":"https://glama.ai/mcp/schemas/server.json","maintainers":["patrickliu0077"]}
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "name": "simplefunctions-cli",
+  "description": "Prediction market MCP server — world state, uncertainty index, edges, orderbook, and 55+ tools from 30,000+ Kalshi & Polymarket markets.",
+  "maintainers": ["patrickliu0077"],
+  "repository": "https://github.com/spfunctions/simplefunctions-cli",
+  "homepage": "https://simplefunctions.dev",
+  "command": {
+    "cmd": "node",
+    "args": ["mcp-server.mjs"]
+  },
+  "tools": [
+    "get_world_state",
+    "get_uncertainty_index",
+    "search_markets",
+    "get_market_detail",
+    "get_orderbook",
+    "get_edges",
+    "get_contagion",
+    "get_calibration"
+  ]
+}

@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@spfunctions/cli.svg)](https://www.npmjs.com/package/@spfunctions/cli)
 [![license](https://img.shields.io/npm/l/@spfunctions/cli.svg)](https://github.com/spfunctions/simplefunctions-cli/blob/main/LICENSE)
+[![simplefunctions-cli MCP server](https://glama.ai/mcp/servers/spfunctions/simplefunctions-cli/badges/score.svg)](https://glama.ai/mcp/servers/spfunctions/simplefunctions-cli)
 
 Prediction market intelligence from the terminal. Build causal thesis models, scan Kalshi & Polymarket for mispricings, and trade.
 
