@@ -115,11 +115,11 @@ server.tool(
 
 server.tool(
   'get_changes',
-  'Top 24h price movers across all prediction markets, ranked by absolute probability change. Read-only, no auth, no parameters. Use this when you need "what moved today"; use get_world_delta for a token-efficient diff against an arbitrary timestamp, or get_context for movers bundled with edges and highlights.',
+  'What moved in the last 24 hours: incremental delta of probability changes across all tracked prediction markets, returned as compact markdown (~30-50 tokens). Read-only, no auth, no parameters. Thin wrapper over get_world_delta with since="24h"; use get_world_delta directly if you need a different lookback window or JSON output, or get_context for movers bundled with edges and highlights.',
   {},
   async () => {
-    const data = await api('/api/public/changes');
-    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    const data = await fetch(`${BASE}/api/agent/world/delta?since=24h`).then(r => r.text());
+    return { content: [{ type: 'text', text: data }] };
   }
 );
 
