@@ -793,6 +793,53 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
       },
     },
     {
+      name: 'screen_markets',
+      label: 'Screen Markets',
+      description: 'Indicator-based universe screener. The middle layer between raw price scan and LLM thesis edges. Filters by cheap math labels — IY (implied annualized yield %), CRI (cliff risk), OR (event overround / arb), EE (expected edge in cents), LAS (liquidity-adjusted spread), τ (days to expiry). Null is signal: no_thesis=true / no_orderbook=true are POSITIVE selectors for unloved markets. Use to bulk-discover candidates before paying any LLM cost.',
+      parameters: Type.Object({
+        iy_min: Type.Optional(Type.Number({ description: 'Minimum implied yield, annualized %. Try 200 for long-tail.' })),
+        iy_max: Type.Optional(Type.Number()),
+        ee_min: Type.Optional(Type.Number({ description: 'Minimum expected edge in cents (requires thesis or regime row).' })),
+        las_max: Type.Optional(Type.Number({ description: 'Maximum liquidity-adjusted spread. Try 0.05.' })),
+        or_min: Type.Optional(Type.Number({ description: 'Minimum event overround. 0.05 = 105¢ field.' })),
+        or_max: Type.Optional(Type.Number()),
+        cri_max: Type.Optional(Type.Number({ description: 'Maximum cliff risk. 1=balanced, ∞=cliff.' })),
+        cri_min: Type.Optional(Type.Number()),
+        tau_max_days: Type.Optional(Type.Number({ description: 'Maximum days to expiry.' })),
+        tau_min_days: Type.Optional(Type.Number()),
+        category: Type.Optional(Type.String({ description: 'crypto, political, financial, sports, etc' })),
+        venue: Type.Optional(Type.String({ description: 'kalshi or polymarket' })),
+        keyword: Type.Optional(Type.String({ description: 'Substring filter on title.' })),
+        has_thesis: Type.Optional(Type.Boolean()),
+        no_thesis: Type.Optional(Type.Boolean({ description: 'POSITIVE selector — only markets WITHOUT a thesis (unloved long tail).' })),
+        has_orderbook: Type.Optional(Type.Boolean()),
+        no_orderbook: Type.Optional(Type.Boolean({ description: 'POSITIVE selector — only markets WITHOUT recent orderbook attention.' })),
+        sort: Type.Optional(Type.String({ description: 'iy | ee | or | las | cri | tau | volume. Default: iy' })),
+        order: Type.Optional(Type.String({ description: 'asc | desc. Default: desc' })),
+        limit: Type.Optional(Type.Number({ description: 'Default 50, max 200' })),
+      }),
+      execute: async (_toolCallId: string, params: any) => {
+        const qs = new URLSearchParams()
+        for (const [k, v] of Object.entries(params)) {
+          if (v === undefined || v === null) continue
+          qs.set(k, String(v))
+        }
+        const res = await fetch(`https://simplefunctions.dev/api/public/screen?${qs.toString()}`)
+        if (!res.ok) {
+          const text = await res.text()
+          return {
+            content: [{ type: 'text' as const, text: `Screen error ${res.status}: ${text}` }],
+            details: {},
+          }
+        }
+        const data = await res.json()
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+          details: {},
+        }
+      },
+    },
+    {
       name: 'list_theses',
       label: 'List Theses',
       description: 'List all theses for the current user',
