@@ -1226,51 +1226,6 @@ export async function agentCommand(thesisId?: string, opts?: { model?: string; m
         }
       },
     },
-    {
-      name: 'update_nodes',
-      label: 'Update Nodes',
-      description: 'Directly update causal tree node probabilities — zero LLM cost, instant. Use when a confirmed fact (e.g. "CPI printed 3.2%") should be reflected immediately. The `lock` field is advisory (pins the node as stable); evidence can still revise locked nodes in future evaluations.',
-      parameters: Type.Object({
-        thesisId: Type.String({ description: 'Thesis ID' }),
-        updates: Type.Array(Type.Object({
-          nodeId: Type.String({ description: 'Causal tree node ID (e.g. n3, n1.2)' }),
-          probability: Type.Number({ description: 'New probability 0-1. Use 0.99 for confirmed facts.' }),
-          reason: Type.Optional(Type.String({ description: 'Why this update' })),
-        }), { description: 'Node updates to apply' }),
-        lock: Type.Optional(Type.Array(Type.String(), { description: 'Advisory pin on these node IDs.' })),
-      }),
-      execute: async (_toolCallId: string, params: any) => {
-        const result = await sfClient.updateNodes(params.thesisId, params.updates, params.lock)
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-          details: {},
-        }
-      },
-    },
-    {
-      name: 'fork_thesis',
-      label: 'Fork Thesis',
-      description: 'Fork a thesis. Two modes: (1) Clone — call with only idOrSlug to copy a PUBLIC thesis verbatim into the user\'s collection. (2) Evolve — call with newRawThesis to split the user\'s own thesis into a new analytical frame for the same market sector. Evolve mode parks the parent in dormant mode and spins up a child that re-runs formation. Use evolve when the current frame is fundamentally inadequate for what the evidence now shows.',
-      parameters: Type.Object({
-        idOrSlug: Type.String({ description: 'Thesis ID or public slug' }),
-        newRawThesis: Type.Optional(Type.String({ description: 'Evolve mode: new frame in 1-3 sentences. Omit for clone mode.' })),
-        newTitle: Type.Optional(Type.String({ description: 'Evolve mode: short title ≤60 chars' })),
-        reason: Type.Optional(Type.String({ description: 'Evolve mode: why the original frame is no longer adequate' })),
-        inheritEdgeMarketIds: Type.Optional(Type.Array(Type.String(), { description: 'Evolve mode: subset of current edge marketIds to carry over. Omit for fresh market scan.' })),
-      }),
-      execute: async (_toolCallId: string, params: any) => {
-        const result = await sfClient.forkThesis(params.idOrSlug, {
-          newRawThesis: params.newRawThesis,
-          newTitle: params.newTitle,
-          reason: params.reason,
-          inheritEdgeMarketIds: params.inheritEdgeMarketIds,
-        })
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
-          details: {},
-        }
-      },
-    },
   ]
 
   // ── What-if tool (always available) ────────────────────────────────────────
@@ -2859,45 +2814,6 @@ async function runPlainTextAgent(params: {
           confidence: { old: Math.round(oldConf * 100), new: Math.round(newConf * 100), delta: Math.round((newConf - oldConf) * 100) },
           affectedEdges: edges,
         }
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], details: {} }
-      },
-    },
-    {
-      name: 'update_nodes',
-      label: 'Update Nodes',
-      description: 'Directly update causal tree node probabilities — zero LLM cost, instant. Use for confirmed facts. `lock` is advisory.',
-      parameters: Type.Object({
-        thesisId: Type.String({ description: 'Thesis ID' }),
-        updates: Type.Array(Type.Object({
-          nodeId: Type.String(),
-          probability: Type.Number({ description: '0-1' }),
-          reason: Type.Optional(Type.String()),
-        })),
-        lock: Type.Optional(Type.Array(Type.String())),
-      }),
-      execute: async (_id: string, p: any) => {
-        const result = await sfClient.updateNodes(p.thesisId, p.updates, p.lock)
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], details: {} }
-      },
-    },
-    {
-      name: 'fork_thesis',
-      label: 'Fork Thesis',
-      description: 'Fork a thesis. Clone mode (no newRawThesis): copies a PUBLIC thesis verbatim. Evolve mode (with newRawThesis): splits your own thesis into a new analytical frame — parent auto-enters dormant, child re-runs formation. Use evolve when the current frame is fundamentally inadequate.',
-      parameters: Type.Object({
-        idOrSlug: Type.String(),
-        newRawThesis: Type.Optional(Type.String({ description: 'Evolve mode: new frame in 1-3 sentences' })),
-        newTitle: Type.Optional(Type.String()),
-        reason: Type.Optional(Type.String()),
-        inheritEdgeMarketIds: Type.Optional(Type.Array(Type.String())),
-      }),
-      execute: async (_id: string, p: any) => {
-        const result = await sfClient.forkThesis(p.idOrSlug, {
-          newRawThesis: p.newRawThesis,
-          newTitle: p.newTitle,
-          reason: p.reason,
-          inheritEdgeMarketIds: p.inheritEdgeMarketIds,
-        })
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], details: {} }
       },
     },
