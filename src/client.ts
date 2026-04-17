@@ -81,6 +81,33 @@ export class SFClient {
     return this.request('POST', `/api/thesis/${id}/evaluate`)
   }
 
+  /**
+   * Fork a thesis.
+   *   - Clone mode: omit opts or pass an empty object to copy a public thesis verbatim.
+   *   - Evolve mode: pass newRawThesis (+ optional newTitle/reason/inheritEdgeMarketIds)
+   *     to split the thesis into a new analytical frame. Parent auto-enters dormant.
+   */
+  async forkThesis(idOrSlug: string, opts?: {
+    newRawThesis?: string
+    newTitle?: string
+    reason?: string
+    inheritEdgeMarketIds?: string[]
+  }): Promise<any> {
+    return this.request('POST', `/api/thesis/${idOrSlug}/fork`, opts || {})
+  }
+
+  /**
+   * Directly update causal tree node probabilities. Zero LLM cost.
+   * Confidence is recomputed from the weighted average of top-level nodes.
+   */
+  async updateNodes(
+    id: string,
+    updates: Array<{ nodeId: string; probability: number; reason?: string }>,
+    lock?: string[],
+  ): Promise<any> {
+    return this.request('POST', `/api/thesis/${id}/nodes/update`, { updates, lock })
+  }
+
   async getFeed(hours = 24, limit = 200): Promise<any> {
     return this.request('GET', `/api/feed?hours=${hours}&limit=${limit}`)
   }
